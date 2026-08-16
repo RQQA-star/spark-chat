@@ -36,6 +36,12 @@ if (!fs.existsSync(FILE_UPLOADS_DIR)) {
   fs.mkdirSync(FILE_UPLOADS_DIR, { recursive: true });
 }
 
+// 视频文件目录
+export const VIDEO_UPLOADS_DIR = path.join(dataDir, 'video');
+if (!fs.existsSync(VIDEO_UPLOADS_DIR)) {
+  fs.mkdirSync(VIDEO_UPLOADS_DIR, { recursive: true });
+}
+
 // 创建数据库连接（显式标注类型，便于 composite 项目生成可命名的声明）
 const db: Database.Database = new Database(dbPath);
 
@@ -149,6 +155,7 @@ export interface DbMessage {
   file_size: string | null;
   file_mime: string | null;
   file_path: string | null;
+  video_path: string | null;
   reactions: string | null;
   created_at: string;
 }
@@ -248,6 +255,8 @@ if (!msgCols.some(c => c.name === 'file_size')) db.exec("ALTER TABLE messages AD
 if (!msgCols.some(c => c.name === 'file_mime')) db.exec("ALTER TABLE messages ADD COLUMN file_mime TEXT");
 if (!msgCols.some(c => c.name === 'file_path')) db.exec("ALTER TABLE messages ADD COLUMN file_path TEXT");
 if (!msgCols.some(c => c.name === 'reactions')) db.exec("ALTER TABLE messages ADD COLUMN reactions TEXT");
+// 迁移：视频消息路径
+if (!msgCols.some(c => c.name === 'video_path')) db.exec("ALTER TABLE messages ADD COLUMN video_path TEXT");
 
 // 迁移：会话置顶 / 免打扰 / 群公告
 const convCols = db.prepare("PRAGMA table_info(conversations)").all() as { name: string }[];
@@ -421,9 +430,10 @@ export function updateConversation(id: string, updates: Partial<Pick<DbConversat
 
 export function deleteConversation(id: string): boolean {
   // 先收集媒体文件，再删除（FK 级联清消息），最后回收无引用的文件
-  const media = db.prepare('SELECT audio_path, image_path FROM messages WHERE conversation_id = ?').all(id) as {
+  const media = db.prepare('SELECT audio_path, image_path, video_path FROM messages WHERE conversation_id = ?').all(id) as {
     audio_path: string | null;
     image_path: string | null;
+    video_path: string | null;
   }[];
   const ok = db.prepare('DELETE FROM conversations WHERE id = ?').run(id).changes > 0;
   if (ok) {
@@ -436,6 +446,10 @@ export function deleteConversation(id: string): boolean {
       if (row.image_path && !seen.has('i:' + row.image_path)) {
         seen.add('i:' + row.image_path);
         maybeDeleteMediaFile(row.image_path, 'image');
+      }
+      if (row.video_path && !seen.has('v2:' + row.video_path)) {
+        seen.add('v2:' + row.video_path);
+        maybeDeleteMediaFile(row.video_path, 'video');
       }
     }
   }
@@ -536,6 +550,7 @@ export function serializeMessage(m: DbMessage) {
     fileSize: m.file_size ? Number(m.file_size) : null,
     fileMime: m.file_mime,
     filePath: m.file_path,
+    videoPath: m.video_path,
     reactions: m.reactions ? JSON.parse(m.reactions) : null,
     meta: m.meta ? JSON.parse(m.meta) : null,
   };
@@ -590,6 +605,11 @@ export function getAllConversationsSerialized(): SerializedConversation[] {
       const preview =
         last.msg_type === 'voice' ? '[语音]' :
         last.msg_type === 'image' ? '[图片]' :
+        last.msg_type === 'video' ? '[视频]' :
+        last.msg_type === 'sticker' ? '[表情]' :
+        last.msg_type === 'link' ? '[链接]' :
+        last.msg_type === 'location' ? '[位置]' :
+        last.msg_type === 'card' ? '[名片]' :
         (last.content || '').slice(0, 120);
       lastMessage = {
         content: preview,
@@ -662,11 +682,12 @@ export function getMessagesPage(
 export interface CreateMessageInput {
   conversationId: string;
   senderId: string;
-  msgType: 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged';
+  msgType: 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card';
   content?: string;
   transcript?: string;
   audioPath?: string;
   imagePath?: string;
+  videoPath?: string;
   duration?: number;
   toolCalls?: string;
   agentSessionId?: string;
@@ -685,8 +706,8 @@ export function createMessage(input: CreateMessageInput): DbMessage {
     const id = inp.id || uuidv4();
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO messages (id, conversation_id, sender_id, msg_type, content, audio_path, image_path, duration, tool_calls, agent_session_id, transcript, meta, file_name, file_size, file_mime, file_path, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, conversation_id, sender_id, msg_type, content, audio_path, image_path, video_path, duration, tool_calls, agent_session_id, transcript, meta, file_name, file_size, file_mime, file_path, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       inp.conversationId,
@@ -695,6 +716,7 @@ export function createMessage(input: CreateMessageInput): DbMessage {
       inp.content ?? null,
       inp.audioPath ?? null,
       inp.imagePath ?? null,
+      inp.videoPath ?? null,
       inp.duration ?? null,
       inp.toolCalls ?? null,
       inp.agentSessionId ?? null,
@@ -751,14 +773,14 @@ export function getUnreadCount(conversationId: string): number {
 }
 
 // 媒体文件回收：仅当再无任何消息引用该文件名时才删除磁盘文件（避免误删被转发/共享引用的媒体）
-export function maybeDeleteMediaFile(filename: string | null | undefined, kind: 'voice' | 'image'): void {
+export function maybeDeleteMediaFile(filename: string | null | undefined, kind: 'voice' | 'image' | 'video'): void {
   if (!filename) return;
-  const baseDir = kind === 'voice' ? UPLOADS_DIR : IMAGE_UPLOADS_DIR;
+  const baseDir = kind === 'voice' ? UPLOADS_DIR : kind === 'image' ? IMAGE_UPLOADS_DIR : VIDEO_UPLOADS_DIR;
   const abs = path.resolve(baseDir, filename);
   // 安全校验：必须严格位于对应 uploads 目录内，杜绝路径穿越
   if (!abs.startsWith(baseDir + path.sep)) return;
   if (!fs.existsSync(abs)) return;
-  const col = kind === 'voice' ? 'audio_path' : 'image_path';
+  const col = kind === 'voice' ? 'audio_path' : kind === 'image' ? 'image_path' : 'video_path';
   const refs = (db.prepare(`SELECT COUNT(*) as c FROM messages WHERE ${col} = ?`).get(filename) as { c: number }).c;
   if (refs === 0) {
     // 异步、尽力而为地删除：避免在杀软扫描并锁定文件时，unlinkSync 阻塞当前请求
@@ -776,15 +798,17 @@ export function deleteMessage(messageId: string): boolean {
   if (ok && m) {
     maybeDeleteMediaFile(m.audio_path, 'voice');
     maybeDeleteMediaFile(m.image_path, 'image');
+    maybeDeleteMediaFile(m.video_path, 'video');
   }
   return ok;
 }
 
 // 清空会话全部消息（保留会话本身），并回收所有媒体文件
 export function clearConversationMessages(conversationId: string): boolean {
-  const media = db.prepare('SELECT audio_path, image_path FROM messages WHERE conversation_id = ?').all(conversationId) as {
+  const media = db.prepare('SELECT audio_path, image_path, video_path FROM messages WHERE conversation_id = ?').all(conversationId) as {
     audio_path: string | null;
     image_path: string | null;
+    video_path: string | null;
   }[];
   db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
   db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), conversationId);
@@ -797,6 +821,10 @@ export function clearConversationMessages(conversationId: string): boolean {
     if (row.image_path && !seen.has('i:' + row.image_path)) {
       seen.add('i:' + row.image_path);
       maybeDeleteMediaFile(row.image_path, 'image');
+    }
+    if (row.video_path && !seen.has('v2:' + row.video_path)) {
+      seen.add('v2:' + row.video_path);
+      maybeDeleteMediaFile(row.video_path, 'video');
     }
   }
   return true;

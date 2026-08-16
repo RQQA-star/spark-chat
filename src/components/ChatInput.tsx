@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Button } from 'tdesign-react';
-import { Mic, MicOff, Send, Square, X, Check, Smile, Image as ImageIcon, File as FileIcon } from 'lucide-react';
+import { Mic, MicOff, Send, Square, X, Check, Smile, Image as ImageIcon, File as FileIcon, Plus, MapPin, Film, Link2, UserPlus, SmilePlus } from 'lucide-react';
 import { Contact } from '../types';
 import { useVoice, blobToBase64, blobExt } from '../hooks/useVoice';
 
@@ -9,6 +9,9 @@ interface ReplyInfo {
   senderName: string;
   preview: string;
 }
+
+// 大表情（贴纸）候选集
+const STICKERS = ['😀','😁','😂','🤣','😊','😍','😘','🤔','😎','😭','😅','🙄','👍','👎','👏','🙏','💪','🎉','🔥','❤️','💔','✨','🌹','🌟','🍻','☕','🚀','💡','✅','💯','🤝','😴','🥳','😇','🤩','😏','🙈','💋','🌈','⚡'];
 
 interface ChatInputProps {
   onSendText: (text: string, mentions?: string[], quote?: { messageId: string; senderName: string; preview: string; msgType?: string }) => void;
@@ -23,6 +26,12 @@ interface ChatInputProps {
   replyTo?: ReplyInfo | null;
   onCancelReply?: () => void;
   onSendFile?: (base64: string, ext: string, name: string) => void;
+  onSendSticker?: (emoji: string) => void;
+  onSendLink?: (url: string) => void;
+  onSendVideo?: (base64: string, ext: string) => void;
+  onSendLocation?: (lat: number, lng: number, name?: string, address?: string) => void;
+  onSendCard?: (contactId: string) => void;
+  contacts?: Contact[];
 }
 
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','🤔','😎','😭','😅','🙄','👍','👎','👏','🙏','💪','🎉','🔥','❤️','💔','✨','🌹','🌟','🍻','☕','🚀','💡','✅','❌'];
@@ -32,7 +41,7 @@ function fmtDur(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile }: ChatInputProps) {
+export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile, onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard, contacts = [] }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -55,6 +64,56 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
   const insertEmoji = (e: string) => {
     setText(prev => prev + e);
     requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  // 大表情（贴纸）面板
+  const [showSticker, setShowSticker] = useState(false);
+  const insertSticker = (e: string) => {
+    onSendSticker?.(e);
+    setShowSticker(false);
+  };
+
+  // 「+」扩展菜单（名片 / 位置 / 视频 / 链接）
+  const [showPlus, setShowPlus] = useState(false);
+  const [cardPicker, setCardPicker] = useState(false);
+  const videoRef = useRef<HTMLInputElement>(null);
+
+  const handleVideoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 200 * 1024 * 1024) { alert('视频过大（上限 200MB）'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || '';
+      const ext = file.name.split('.').pop() || 'mp4';
+      onSendVideo?.(base64, ext);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const sendLocationNow = () => {
+    setShowPlus(false);
+    const fallback = () => onSendLocation?.(0, 0, '我的位置', '（定位不可用，示例坐标）');
+    if (!navigator.geolocation) { fallback(); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => onSendLocation?.(pos.coords.latitude, pos.coords.longitude, '我的位置'),
+      () => fallback(),
+      { enableHighAccuracy: false, timeout: 5000 },
+    );
+  };
+
+  const sendLinkNow = () => {
+    setShowPlus(false);
+    const url = window.prompt('输入链接地址（http(s):// 开头）');
+    if (url && /^https?:\/\//i.test(url.trim())) onSendLink?.(url.trim());
+  };
+
+  const pickCard = (id: string) => {
+    setCardPicker(false);
+    setShowPlus(false);
+    onSendCard?.(id);
   };
 
   // 选择图片 -> base64 -> 上传
@@ -239,6 +298,74 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
           </button>
           <input ref={anyFileRef} type="file" className="hidden" onChange={handleFilePick} />
 
+          {/* 大表情（贴纸） */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => { setShowSticker(v => !v); setShowEmoji(false); setShowPlus(false); }}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+              style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
+              title="大表情"
+            >
+              <SmilePlus size={18} />
+            </button>
+            {showSticker && (
+              <div
+                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-7 gap-1 z-20 max-h-56 overflow-y-auto"
+                style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
+              >
+                {STICKERS.map(em => (
+                  <button key={em} onClick={() => insertSticker(em)} className="text-2xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
+                    {em}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 「+」扩展菜单：名片 / 位置 / 视频 / 链接 */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => { setShowPlus(v => !v); setShowSticker(false); setShowEmoji(false); }}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+              style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
+              title="更多"
+            >
+              <Plus size={18} />
+            </button>
+            {showPlus && (
+              <div
+                className="absolute bottom-full left-0 mb-2 w-44 rounded-xl shadow-lg p-1 z-20"
+                style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
+              >
+                <button onClick={() => setCardPicker(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>
+                  <UserPlus size={16} /> 名片
+                </button>
+                <button onClick={sendLocationNow} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>
+                  <MapPin size={16} /> 位置
+                </button>
+                <button onClick={() => { setShowPlus(false); videoRef.current?.click(); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>
+                  <Film size={16} /> 视频
+                </button>
+                <button onClick={sendLinkNow} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>
+                  <Link2 size={16} /> 链接
+                </button>
+                {cardPicker && (
+                  <div className="mt-1 max-h-52 overflow-y-auto rounded-lg border p-1" style={{ borderColor: 'var(--td-component-stroke)' }}>
+                    {contacts.filter(c => c.id !== meId).map(c => (
+                      <button key={c.id} onClick={() => pickCard(c.id)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]">
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: c.avatarColor || '#0052d9' }}>
+                          {c.avatarText || c.name.slice(0, 1)}
+                        </div>
+                        <span className="text-sm truncate" style={{ color: 'var(--td-text-color-primary)' }}>{c.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={handleVideoPick} />
+
           {/* 录音按钮（按住说话：按下开始 / 松开发送 / 上滑取消） */}
           <button
             onPointerDown={handlePressStart}
@@ -331,7 +458,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
           )}
         </div>
         <div className="text-[11px] mt-1.5 px-1" style={{ color: 'var(--td-text-color-placeholder)' }}>
-          支持文字与语音消息 · 与「星火助手」对话即调用 CodeBuddy Agent
+          支持文字、语音、图片、视频、位置、名片与大表情 · 与「星火助手」对话即调用 CodeBuddy Agent
         </div>
       </div>
     </div>

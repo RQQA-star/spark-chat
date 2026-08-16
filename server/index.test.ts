@@ -419,3 +419,111 @@ describe('本机远程协助生命周期 (P3-11b)', () => {
     expect(after!.remote_assist_active).toBe(0);
   });
 });
+
+// ============= P2-W1 · 新消息类型（表情/链接/视频/位置/名片）校验与落库 =============
+describe('新消息类型 (P2-W1)', () => {
+  it('大表情缺 content → 400', async () => {
+    const conv = await createConversation('p2-sticker');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'sticker' });
+    expect(res.status).toBe(400);
+  });
+
+  it('合法大表情 → 200 且 content 透传', async () => {
+    const conv = await createConversation('p2-sticker');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'sticker', content: '🎉' });
+    expect(res.status).toBe(200);
+    expect(res.body.message?.msgType).toBe('sticker');
+    expect(res.body.message?.content).toBe('🎉');
+  });
+
+  it('链接非 http(s) → 400', async () => {
+    const conv = await createConversation('p2-link');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'link', content: 'example.com' });
+    expect(res.status).toBe(400);
+  });
+
+  it('合法链接 → 200 且 content / meta.link 持久化', async () => {
+    const conv = await createConversation('p2-link');
+    const url = 'https://example.com/article';
+    const res = await postMessage(conv.id, {
+      senderId: 'me', msgType: 'link', content: url,
+      meta: { link: { url, title: '标题', description: '摘要' } },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.message?.msgType).toBe('link');
+    expect(res.body.message?.content).toBe(url);
+    expect(res.body.message?.meta?.link?.title).toBe('标题');
+  });
+
+  it('视频缺 videoPath → 400', async () => {
+    const conv = await createConversation('p2-video');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'video' });
+    expect(res.status).toBe(400);
+  });
+
+  it('合法视频（带 videoPath）→ 200', async () => {
+    const conv = await createConversation('p2-video');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'video', videoPath: 'vid-1.mp4' });
+    expect(res.status).toBe(200);
+    expect(res.body.message?.msgType).toBe('video');
+    expect(res.body.message?.videoPath).toBe('vid-1.mp4');
+  });
+
+  it('位置缺 lat/lng → 400', async () => {
+    const conv = await createConversation('p2-loc');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'location', content: '家' });
+    expect(res.status).toBe(400);
+  });
+
+  it('合法位置 → 200 且 meta.location 持久化', async () => {
+    const conv = await createConversation('p2-loc');
+    const res = await postMessage(conv.id, {
+      senderId: 'me', msgType: 'location', content: '公司',
+      meta: { location: { lat: 31.23, lng: 121.47, name: '公司', address: '浦东' } },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.message?.msgType).toBe('location');
+    expect(res.body.message?.meta?.location?.lat).toBe(31.23);
+    expect(res.body.message?.meta?.location?.lng).toBe(121.47);
+  });
+
+  it('名片缺 meta.cardId → 400', async () => {
+    const conv = await createConversation('p2-card');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'card', content: '张三' });
+    expect(res.status).toBe(400);
+  });
+
+  it('合法名片 → 200 且 meta.card 持久化', async () => {
+    const conv = await createConversation('p2-card');
+    const res = await postMessage(conv.id, {
+      senderId: 'me', msgType: 'card', content: '张三',
+      meta: { card: { cardId: 'c_zhang', cardName: '张三', cardAvatarText: '张', cardAvatarColor: '#888' } },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.message?.msgType).toBe('card');
+    expect(res.body.message?.meta?.card?.cardId).toBe('c_zhang');
+  });
+
+  it('会话最后一条为视频时 lastMessage 预览为 [视频]', async () => {
+    const conv = await createConversation('p2-preview');
+    await postMessage(conv.id, { senderId: 'me', msgType: 'video', videoPath: 'vid-2.mp4' });
+    const list = await request(app).get('/api/conversations');
+    const entry = (list.body.conversations as any[]).find(c => c.id === conv.id);
+    expect(entry?.lastMessage?.content).toBe('[视频]');
+  });
+});
+
+// ============= P2-W3 · 数据导出 =============
+describe('数据导出 (P2-W3)', () => {
+  it('GET /api/export 返回 version:1 与 contacts/conversations/messages 数组', async () => {
+    const conv = await createConversation('p2-export');
+    await postMessage(conv.id, { senderId: 'me', msgType: 'text', content: '导出测试' });
+    const res = await request(app).get('/api/export');
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(1);
+    expect(Array.isArray(res.body.conversations)).toBe(true);
+    expect(Array.isArray(res.body.messages)).toBe(true);
+    expect(res.body.conversations.some((c: any) => c.id === conv.id)).toBe(true);
+    expect(res.body.messages.some((m: any) => m.content === '导出测试')).toBe(true);
+  });
+});

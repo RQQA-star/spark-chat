@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import { Loading } from 'tdesign-react';
 import { ChatMarkdown } from '@tdesign-react/chat';
-import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, MoreVertical, File as FileIcon, Pencil, Star } from 'lucide-react';
+import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, MoreVertical, File as FileIcon, Pencil, Star, MapPin, Link2, Video, IdCard } from 'lucide-react';
 import { ConvMessage, Contact, PermissionRequest } from '../types';
 import { ToolCallsCollapse } from './ToolCallsCollapse';
 import { InlinePermissionCard } from './InlinePermissionCard';
@@ -34,6 +34,8 @@ interface ChatMessagesProps {
   selection?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onEnterMultiSelect?: (id: string) => void;
+  // 初次加载当前会话消息时显示骨架屏（仅当列表为空时生效）
+  loading?: boolean;
 }
 
 function fmtClock(iso: string) {
@@ -86,6 +88,11 @@ function previewOf(m: ConvMessage): string {
   if (m.msgType === 'voice') return '[语音]';
   if (m.msgType === 'image') return '[图片]';
   if (m.msgType === 'file') return `[文件] ${m.fileName || ''}`;
+  if (m.msgType === 'video') return '[视频]';
+  if (m.msgType === 'sticker') return '[表情]';
+  if (m.msgType === 'link') return `[链接] ${m.meta?.link?.title || m.content || ''}`;
+  if (m.msgType === 'location') return `[位置] ${m.meta?.location?.name || m.meta?.location?.address || ''}`;
+  if (m.msgType === 'card') return `[名片] ${m.meta?.card?.cardName || m.content || ''}`;
   if (m.msgType === 'merged') return '[聊天记录]';
   return (m.content || '').slice(0, 80);
 }
@@ -165,6 +172,123 @@ function MergedBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
   );
 }
 
+// 大表情（贴纸）：无气泡背景，大号展示
+function StickerBubble({ content }: { content: string }) {
+  return (
+    <div className="text-[64px] leading-none select-none" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))' }}>
+      {content}
+    </div>
+  );
+}
+
+// 链接卡片
+function LinkBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
+  const link = msg.meta?.link;
+  const url = link?.url || msg.content || '';
+  let host = '';
+  try { host = new URL(url).host; } catch { host = url; }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[240px] max-w-[300px] no-underline"
+      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-component)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+    >
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#0052d9', color: '#fff' }}>
+        <Link2 size={20} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm truncate font-medium">{link?.title || host}</div>
+        <div className="text-[11px] opacity-70 truncate">{link?.description || url}</div>
+      </div>
+    </a>
+  );
+}
+
+// 视频消息
+function VideoBubble({ videoPath }: { videoPath: string }) {
+  const [err, setErr] = useState(false);
+  if (err) {
+    return (
+      <div className="flex items-center justify-center w-[240px] h-[160px] rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+        <span className="text-xs">视频加载失败</span>
+      </div>
+    );
+  }
+  return (
+    <video
+      src={`/api/video/${videoPath}`}
+      controls
+      preload="metadata"
+      onError={() => setErr(true)}
+      className="max-w-[240px] max-h-[320px] rounded-lg bg-black"
+    />
+  );
+}
+
+// 位置消息
+function LocationBubble({ msg, isMe, onOpen }: { msg: ConvMessage; isMe: boolean; onOpen?: () => void }) {
+  const loc = msg.meta?.location;
+  const name = loc?.name || '位置';
+  const address = loc?.address || (loc ? `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` : '');
+  const mapsUrl = loc ? `https://uri.amap.com/marker?position=${loc.lng},${loc.lat}&name=${encodeURIComponent(name)}` : '';
+  return (
+    <div
+      className="rounded-lg overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
+      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-container)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      onClick={onOpen}
+    >
+      <div
+        className="h-24 flex items-center justify-center"
+        style={{ background: 'linear-gradient(135deg,#e8f3ff,#d6e9ff)' }}
+      >
+        <MapPin size={32} style={{ color: '#0052d9' }} />
+      </div>
+      <div className="px-3 py-2">
+        <div className="text-sm font-medium truncate">{name}</div>
+        <div className="text-[11px] opacity-70 truncate mt-0.5">{address}</div>
+      </div>
+      {mapsUrl && (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="block text-center text-[12px] py-1.5 border-t"
+          style={{ borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'var(--td-component-stroke)', color: '#0052d9' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          在地图中打开
+        </a>
+      )}
+    </div>
+  );
+}
+
+// 名片消息（分享联系人）
+function CardBubble({ msg, isMe, onPreviewContact }: { msg: ConvMessage; isMe: boolean; onPreviewContact?: (id: string) => void }) {
+  const card = msg.meta?.card;
+  if (!card) return null;
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[220px] max-w-[280px] cursor-pointer"
+      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-container)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      onClick={() => onPreviewContact?.(card.cardId)}
+    >
+      <div className="w-11 h-11 rounded-lg flex items-center justify-center font-semibold text-white flex-shrink-0" style={{ backgroundColor: card.cardAvatarColor || '#888', fontSize: 16 }}>
+        {card.cardIsAgent ? <Bot size={18} /> : (card.cardAvatarText || card.cardName.slice(0, 1))}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium truncate">{card.cardName}</span>
+          <IdCard size={14} className="opacity-60 flex-shrink-0" />
+        </div>
+        <div className="text-[11px] opacity-70">{card.cardIsAgent ? '星火助手' : '个人名片'}</div>
+      </div>
+    </div>
+  );
+}
+
 function Reactions({ msg, meId, onToggle }: { msg: ConvMessage; meId: string; onToggle: (e: string) => void }) {
   const map = msg.reactions || {};
   const entries = Object.entries(map).filter(([, ids]) => (ids as string[]).length > 0);
@@ -193,11 +317,33 @@ function Reactions({ msg, meId, onToggle }: { msg: ConvMessage; meId: string; on
   );
 }
 
+// 初始加载当前会话消息时的骨架屏：模拟若干条左右交替的聊天气泡，配合 shimmer 动画
+function MessageSkeleton() {
+  const rows = [false, true, false, false, true, false, true, false];
+  return (
+    <div className="flex flex-col gap-4 w-full">
+      {rows.map((me, i) => (
+        <div key={i} className={`flex gap-3 ${me ? 'flex-row-reverse' : ''}`}>
+          <div className="w-9 h-9 rounded-lg bg-[var(--td-bg-color-component)] animate-pulse flex-shrink-0" />
+          <div className={`flex flex-col gap-1.5 max-w-[70%] ${me ? 'items-end' : 'items-start'}`}>
+            <div
+              className="h-10 rounded-[14px] bg-[var(--td-bg-color-component)] animate-pulse"
+              style={{ width: i % 3 === 0 ? 200 : i % 3 === 1 ? 120 : 260 }}
+            />
+            <div className="h-3 w-12 rounded bg-[var(--td-bg-color-component)] animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,
   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, scrollRef,
   onPreviewImage, onPreviewContact, onFavorite,
   multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
+  loading = false,
 }: ChatMessagesProps) {
   const getContact = (id: string): Contact | undefined => contacts.find(c => c.id === id);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -259,8 +405,11 @@ export function ChatMessages({
   };
 
   return (
-    <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full" onClick={() => { setMenu(null); setReactionFor(null); }}>
-      {messages.map((msg, i) => {
+    <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full" style={{ fontSize: 'calc(15px * var(--spark-font-scale, 1))' }} onClick={() => { setMenu(null); setReactionFor(null); }}>
+      {loading && messages.length === 0 ? (
+        <MessageSkeleton />
+      ) : (
+      messages.map((msg, i) => {
         const prev = i > 0 ? messages[i - 1] : null;
         const showDivider = !prev || !isSameDay(prev.createdAt, msg.createdAt);
         const divider = showDivider ? (
@@ -385,7 +534,7 @@ export function ChatMessages({
                 ) : (
                   <>
                     {msg.msgType === 'text' && (
-                      <div className="px-3.5 py-2.5 leading-relaxed break-words text-[15px] whitespace-pre-wrap" style={bubbleStyle} onClick={onBubbleClick}>
+                      <div className="px-3.5 py-2.5 leading-relaxed break-words text-[1em] whitespace-pre-wrap" style={bubbleStyle} onClick={onBubbleClick}>
                         {renderText(msg.content || '', msg, contacts)}
                         {msg.edited && <span className="text-[10px] opacity-60 ml-1">(已编辑)</span>}
                       </div>
@@ -417,10 +566,40 @@ export function ChatMessages({
                       </div>
                     )}
 
+                    {msg.msgType === 'sticker' && (
+                      <div onClick={onBubbleClick}>
+                        <StickerBubble content={msg.content || ''} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'link' && (
+                      <div onClick={onBubbleClick}>
+                        <LinkBubble msg={msg} isMe={isMe} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'video' && msg.videoPath && (
+                      <div onClick={onBubbleClick}>
+                        <VideoBubble videoPath={msg.videoPath} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'location' && (
+                      <div onClick={onBubbleClick}>
+                        <LocationBubble msg={msg} isMe={isMe} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'card' && (
+                      <div onClick={onBubbleClick}>
+                        <CardBubble msg={msg} isMe={isMe} onPreviewContact={onPreviewContact} />
+                      </div>
+                    )}
+
                     {msg.msgType === 'agent' && (
                       <div className="flex flex-col gap-2" style={{ ...bubbleStyle, maxWidth: '100%' }}>
                         {msg.content ? (
-                          <div className="px-3.5 py-2.5 leading-relaxed break-words text-[15px] chat-markdown" style={{ color: 'var(--td-text-color-primary)' }}>
+                          <div className="px-3.5 py-2.5 leading-relaxed break-words text-[1em] chat-markdown" style={{ color: 'var(--td-text-color-primary)' }}>
                             <ChatMarkdown content={msg.content} />
                           </div>
                         ) : msg.isStreaming ? (
@@ -492,7 +671,8 @@ export function ChatMessages({
             </div>
           </Fragment>
         );
-      })}
+      })
+      )}
 
       {/* 内联权限确认 */}
       {permissionRequest && onPermissionAllow && onPermissionDeny && (

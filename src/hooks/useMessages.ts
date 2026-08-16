@@ -27,6 +27,8 @@ export function useMessages(
   // 分页加载历史消息：游标 + 是否还有更早消息 + 加载中
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  // 初次加载当前会话消息时的骨架屏标记（仅切会话时触发，后端重连/刷新不改变它）
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
   const cursorRef = useRef<{ createdAt: string; id: string } | null>(null);
   const loadingOlderRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -67,7 +69,8 @@ export function useMessages(
     setHasMoreMessages(true);
     loadingOlderRef.current = false;
     setIsLoadingOlder(false);
-    loadMessages();
+    setIsInitialLoading(true);
+    loadMessages().finally(() => setIsInitialLoading(false));
   }, [conversationId, loadMessages]);
 
   // upsert helper
@@ -286,6 +289,7 @@ export function useMessages(
       fileSize: (payload.fileSize as number) ?? null,
       fileMime: (payload.fileMime as string) ?? null,
       filePath: (payload.filePath as string) ?? null,
+      videoPath: (payload.videoPath as string) ?? null,
       createdAt: new Date().toISOString(),
       status: 'sending',
     };
@@ -383,6 +387,11 @@ export function useMessages(
         const preview =
           m.msgType === 'image' ? '[图片]' :
           m.msgType === 'voice' ? '[语音]' :
+          m.msgType === 'video' ? '[视频]' :
+          m.msgType === 'sticker' ? '[表情]' :
+          m.msgType === 'link' ? '[链接]' :
+          m.msgType === 'location' ? '[位置]' :
+          m.msgType === 'card' ? '[名片]' :
           (m.content || '');
         notifyAtMention(senderName, preview, m.conversationId);
       }
@@ -587,11 +596,70 @@ export function useMessages(
     if (msg) triggerAutoReplies('', []);
   }, [conversationId, commitClientMessage, triggerAutoReplies]);
 
+  // 发送大表情（贴纸）
+  const sendSticker = useCallback(async (emoji: string) => {
+    if (!conversationId || !emoji.trim()) return;
+    const msg = await commitClientMessage({ msgType: 'sticker', content: emoji.trim() });
+    if (msg) triggerAutoReplies('', []);
+  }, [conversationId, commitClientMessage, triggerAutoReplies]);
+
+  // 发送链接卡片
+  const sendLink = useCallback(async (url: string, title?: string, description?: string) => {
+    if (!conversationId || !url.trim()) return;
+    const msg = await commitClientMessage({
+      msgType: 'link', content: url.trim(),
+      meta: { link: { url: url.trim(), title, description } },
+    });
+    if (msg) triggerAutoReplies('', []);
+  }, [conversationId, commitClientMessage, triggerAutoReplies]);
+
+  // 发送视频消息
+  const sendVideo = useCallback(async (base64: string, ext: string) => {
+    if (!conversationId) return;
+    const up = await fetch('/api/video/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video: base64, ext }),
+    });
+    const upData = await up.json();
+    if (!upData.videoPath) { console.error('视频上传失败'); return; }
+    const msg = await commitClientMessage({ msgType: 'video', videoPath: upData.videoPath, content: '' });
+    if (msg) triggerAutoReplies('', []);
+  }, [conversationId, commitClientMessage, triggerAutoReplies]);
+
+  // 发送位置消息
+  const sendLocation = useCallback(async (lat: number, lng: number, name?: string, address?: string) => {
+    if (!conversationId) return;
+    const msg = await commitClientMessage({
+      msgType: 'location', content: name || '位置',
+      meta: { location: { lat, lng, name, address } },
+    });
+    if (msg) triggerAutoReplies('', []);
+  }, [conversationId, commitClientMessage, triggerAutoReplies]);
+
+  // 发送名片（分享联系人）
+  const sendCard = useCallback(async (contactId: string) => {
+    if (!conversationId) return;
+    const c = contacts.find(x => x.id === contactId);
+    if (!c || c.id === meId) return;
+    const msg = await commitClientMessage({
+      msgType: 'card', content: c.name,
+      meta: {
+        card: {
+          cardId: c.id, cardName: c.name,
+          cardAvatarText: c.avatarText, cardAvatarColor: c.avatarColor, cardIsAgent: c.isAgent,
+        },
+      },
+    });
+    if (msg) triggerAutoReplies('', []);
+  }, [conversationId, contacts, meId, commitClientMessage, triggerAutoReplies]);
+
   return {
     messages, loadMessages, sendText, sendVoice, sendImage, sendToAgent, retryMessage,
-    loadOlderMessages, hasMoreMessages, isLoadingOlder,
+    loadOlderMessages, hasMoreMessages, isLoadingOlder, isInitialLoading,
     typingMembers, isAgentThinking, permissionRequest, handleStop, remoteAssistActive,
     handlePermissionAllow, handlePermissionDeny, deleteMessage,
     recallMessage, editMessage, toggleReaction, sendFile, deleteMessages,
+    sendSticker, sendLink, sendVideo, sendLocation, sendCard,
   };
 }

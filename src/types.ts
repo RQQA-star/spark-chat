@@ -64,7 +64,7 @@ export interface Conversation {
   announcement?: string | null;
 }
 
-export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged';
+export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card';
 
 export interface ToolCall {
   id: string;
@@ -88,7 +88,17 @@ export interface ConvMessage {
   readAt?: string | null;
   toolCalls?: ToolCall[] | null;
   agentSessionId?: string | null;
-  meta?: { forwardedFromName?: string; mentions?: string[]; quote?: QuoteRef } | null;
+  meta?: {
+    forwardedFromName?: string;
+    mentions?: string[];
+    quote?: QuoteRef;
+    /** 链接卡片 */
+    link?: { url: string; title?: string; description?: string; siteName?: string };
+    /** 位置消息 */
+    location?: { lat: number; lng: number; name?: string; address?: string };
+    /** 名片消息（分享联系人） */
+    card?: { cardId: string; cardName: string; cardAvatarText?: string; cardAvatarColor?: string; cardIsAgent?: boolean };
+  } | null;
   createdAt: string;
   /** 前端临时状态 */
   isStreaming?: boolean;
@@ -109,6 +119,8 @@ export interface ConvMessage {
   fileMime?: string | null;
   /** 文件存储文件名（服务端生成的 uuid 名，用于下载） */
   filePath?: string | null;
+  /** 视频消息存储文件名 */
+  videoPath?: string | null;
 }
 
 export interface PermissionRequest {

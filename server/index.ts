@@ -361,8 +361,9 @@ app.get("/api/conversations/:id/messages", (req, res) => {
 });
 
 // 发送通用消息（文本 / 自动回复占位等）。Agent 消息走 /agent 端点。
-// 客户端仅允许发送 text/voice/image；agent/system 由服务端内部写入，禁止客户端伪造。
-const CLIENT_MSG_TYPES = new Set(['text', 'voice', 'image', 'file', 'merged']);
+// 客户端仅允许发送 text/voice/image/file/merged 及扩展类型（sticker/link/video/location/card）；
+// agent/system 由服务端内部写入，禁止客户端伪造。
+const CLIENT_MSG_TYPES = new Set(['text', 'voice', 'image', 'file', 'merged', 'sticker', 'link', 'video', 'location', 'card']);
 const SERVER_MSG_TYPES = new Set(['agent', 'system']);
 app.post("/api/conversations/:id/messages", (req, res) => {
   try {
@@ -370,7 +371,7 @@ app.post("/api/conversations/:id/messages", (req, res) => {
     const conv = db.getConversation(conversationId);
     if (!conv) return res.status(404).json({ error: '会话不存在' });
 
-    const { senderId, msgType = 'text', content, audioPath, imagePath, duration, meta, transcript, fileName, fileSize, fileMime, filePath } = req.body;
+    const { senderId, msgType = 'text', content, audioPath, imagePath, videoPath, duration, meta, transcript, fileName, fileSize, fileMime, filePath } = req.body;
     if (!senderId) return res.status(400).json({ error: '缺少 senderId' });
     // 禁止以助手身份发言（助手消息只能由 /agent 端点内部生成）
     if (senderId === AGENT_CONTACT_ID) {
@@ -395,14 +396,29 @@ app.post("/api/conversations/:id/messages", (req, res) => {
     if (msgType === 'file' && !filePath) {
       return res.status(400).json({ error: '缺少 filePath（文件未上传）' });
     }
+    if (msgType === 'sticker' && (!content || typeof content !== 'string' || !content.trim())) {
+      return res.status(400).json({ error: '缺少表情内容' });
+    }
+    if (msgType === 'link' && (!content || typeof content !== 'string' || !/^https?:\/\//i.test(content))) {
+      return res.status(400).json({ error: '缺少合法的链接地址（须以 http(s):// 开头）' });
+    }
+    if (msgType === 'video' && !videoPath) {
+      return res.status(400).json({ error: '缺少 videoPath（视频未上传）' });
+    }
+    if (msgType === 'location' && (!meta || !meta.location || typeof meta.location.lat !== 'number' || typeof meta.location.lng !== 'number')) {
+      return res.status(400).json({ error: '缺少位置坐标（meta.location.lat/lng）' });
+    }
+    if (msgType === 'card' && (!meta || !meta.card || typeof meta.card.cardId !== 'string' || !meta.card.cardId)) {
+      return res.status(400).json({ error: '缺少名片联系人（meta.card.cardId）' });
+    }
     if (meta !== undefined && (meta === null || typeof meta !== 'object' || Array.isArray(meta))) {
       return res.status(400).json({ error: 'meta 必须为对象' });
     }
     const clientId = typeof req.body.clientId === 'string' ? req.body.clientId : undefined;
     // msgType 已通过 CLIENT_MSG_TYPES 校验，断言为客户端允许的字面量联合类型以通过严格类型检查
-    const safeMsgType = msgType as 'text' | 'voice' | 'image' | 'file' | 'merged';
+    const safeMsgType = msgType as 'text' | 'voice' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card';
     const saved = db.createMessage({
-      conversationId, senderId, msgType: safeMsgType, content, audioPath, imagePath, duration,
+      conversationId, senderId, msgType: safeMsgType, content, audioPath, imagePath, videoPath, duration,
       transcript: typeof transcript === 'string' ? transcript : undefined,
       meta: meta !== undefined ? meta : undefined,
       fileName: typeof fileName === 'string' ? fileName : undefined,
@@ -598,6 +614,30 @@ app.post("/api/conversations/read-all", (req, res) => {
   }
 });
 
+// ============= 数据导出（全量聊天记录，用于备份 / 迁移） =============
+// 返回 { contacts, conversations, messages } 的 JSON 快照；前端据此生成文件下载。
+// 注意：媒体文件（语音/图片/视频/文件）本身不含在内，仅导出其服务端文件名引用。
+app.get("/api/export", (req, res) => {
+  try {
+    const contacts = db.getAllContacts();
+    const conversations = db.getAllConversations();
+    const messages: any[] = [];
+    for (const c of conversations) {
+      const msgs = db.getMessagesByConversation(c.id).map(db.serializeMessage);
+      messages.push(...msgs);
+    }
+    res.json({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      contacts,
+      conversations,
+      messages,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '导出失败' });
+  }
+});
+
 // ============= 语音上传 / 播放 =============
 const VOICE_EXT_CONTENT: Record<string, string> = {
   webm: 'audio/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4',
@@ -660,6 +700,40 @@ app.get("/api/image/:file", (req, res) => {
     if (!fs.existsSync(filepath)) return res.status(404).send('not found');
     const ext = file.split('.').pop() || 'png';
     res.setHeader('Content-Type', IMAGE_EXT_CONTENT[ext] || 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    fs.createReadStream(filepath).pipe(res);
+  } catch (error: any) {
+    if (!res.headersSent) res.status(500).send('server error');
+  }
+});
+
+// ============= 视频上传 / 播放 =============
+const VIDEO_EXT_CONTENT: Record<string, string> = {
+  mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', mov: 'video/quicktime', mkv: 'video/x-matroska', m4v: 'video/mp4',
+};
+app.post("/api/video/upload", (req, res) => {
+  try {
+    const { video, ext = 'mp4' } = req.body;
+    if (!video || typeof video !== 'string') return res.status(400).json({ error: '缺少 video(base64)' });
+    const cleanExt = String(ext).replace(/[^a-z0-9]/gi, '').toLowerCase() || 'mp4';
+    const buffer = Buffer.from(video, 'base64');
+    if (buffer.length > 200 * 1024 * 1024) return res.status(413).json({ error: '视频过大（上限 200MB）' });
+    const filename = `${uuidv4()}.${cleanExt}`;
+    fs.writeFileSync(path.join(db.VIDEO_UPLOADS_DIR, filename), buffer);
+    res.json({ videoPath: filename });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '视频上传失败' });
+  }
+});
+
+app.get("/api/video/:file", (req, res) => {
+  try {
+    const file = req.params.file;
+    if (file.includes('..') || file.includes('/') || file.includes('\\')) return res.status(400).send('bad');
+    const filepath = path.join(db.VIDEO_UPLOADS_DIR, file);
+    if (!fs.existsSync(filepath)) return res.status(404).send('not found');
+    const ext = file.split('.').pop() || 'mp4';
+    res.setHeader('Content-Type', VIDEO_EXT_CONTENT[ext] || 'video/mp4');
     res.setHeader('Cache-Control', 'no-cache');
     fs.createReadStream(filepath).pipe(res);
   } catch (error: any) {

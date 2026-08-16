@@ -7,6 +7,7 @@ import { useContacts } from './hooks/useContacts';
 import { useConversations } from './hooks/useConversations';
 import { useMessages } from './hooks/useMessages';
 import { useFavorites } from './hooks/useFavorites';
+import { useSettings } from './hooks/useSettings';
 
 import { Sidebar } from './components/Sidebar';
 import { ChatPage } from './pages/ChatPage';
@@ -29,6 +30,7 @@ export default function App() {
   const { contacts, me, getContact, agentContacts, addContact, deleteContact, updateContact } = useContacts();
   const { conversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, setAnnouncement, fetchConversations, applyConversationUpdate, setConversationPinned, setConversationMuted, markAllRead } = useConversations();
   const { favorites, fetchFavorites, addFavorite, removeFavorite } = useFavorites();
+  const { fontScale, setFontScale, chatBg, setChatBg } = useSettings();
 
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [groupDialog, setGroupDialog] = useState(false);
@@ -84,8 +86,9 @@ export default function App() {
   const {
     messages, sendText, sendVoice, sendImage, sendToAgent, retryMessage, typingMembers, isAgentThinking,
     permissionRequest, handleStop, handlePermissionAllow, handlePermissionDeny, deleteMessage, loadMessages,
-    loadOlderMessages, hasMoreMessages, isLoadingOlder, remoteAssistActive,
+    loadOlderMessages, hasMoreMessages, isLoadingOlder, remoteAssistActive, isInitialLoading,
     recallMessage, editMessage, toggleReaction, sendFile, deleteMessages,
+    sendSticker, sendLink, sendVideo, sendLocation, sendCard,
   } = useMessages(currentConversation || null, contacts, me.id, applyConversationUpdate);
 
   // 路由发送：Agent 会话走流式，否则普通文本（群聊携带 @ 成员 / 引用回复）
@@ -279,6 +282,11 @@ export default function App() {
             onDeleteMessages={deleteMessages}
             onBatchForward={handleBatchForward}
             onSendFile={sendFile}
+            onSendSticker={sendSticker}
+            onSendLink={sendLink}
+            onSendVideo={sendVideo}
+            onSendLocation={sendLocation}
+            onSendCard={sendCard}
             onPreviewImage={handlePreviewImage}
             onPreviewContact={handlePreviewContact}
             onFavorite={handleFavorite}
@@ -287,6 +295,7 @@ export default function App() {
             loadOlderMessages={loadOlderMessages}
             hasMoreMessages={hasMoreMessages}
             isLoadingOlder={isLoadingOlder}
+            loading={isInitialLoading}
             onManageGroup={() => setGroupManage(true)}
             onOpenAgentConfig={() => setAgentConfigOpen(true)}
             remoteAssistActive={remoteAssistActive}
@@ -328,7 +337,7 @@ export default function App() {
         onSendLocalAssist={handleSendAgentAssist}
       />
 
-      <SettingsPanel visible={settings} onClose={() => setSettings(false)} theme={theme} onToggleTheme={toggleTheme} notification={{ state: notifPerm, onEnable: enableNotifications }} />
+      <SettingsPanel visible={settings} onClose={() => setSettings(false)} theme={theme} onToggleTheme={toggleTheme} notification={{ state: notifPerm, onEnable: enableNotifications }} fontScale={fontScale} onFontScale={setFontScale} chatBg={chatBg} onChatBg={setChatBg} />
 
       <SearchModal
         visible={searchOpen}

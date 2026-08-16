@@ -18,6 +18,11 @@ interface ChatPageProps {
   onSendVoice: (base64: string, ext: string, durationMs: number, transcript?: string) => void;
   onSendImage: (base64: string, ext: string) => void;
   onSendFile?: (base64: string, ext: string, name: string) => void;
+  onSendSticker?: (emoji: string) => void;
+  onSendLink?: (url: string) => void;
+  onSendVideo?: (base64: string, ext: string) => void;
+  onSendLocation?: (lat: number, lng: number, name?: string, address?: string) => void;
+  onSendCard?: (contactId: string) => void;
   onSendAgentAssist: (text: string) => void;
   onStop: () => void;
   onPermissionAllow: () => void;
@@ -41,6 +46,8 @@ interface ChatPageProps {
   loadOlderMessages: () => Promise<void>;
   hasMoreMessages: boolean;
   isLoadingOlder: boolean;
+  /** 初次加载当前会话消息时显示骨架屏 */
+  loading?: boolean;
   onManageGroup: () => void;
   /** 本机远程协助进行中（来自 useMessages 的实时流状态） */
   remoteAssistActive?: boolean;
@@ -60,7 +67,8 @@ export function ChatPage({
   onPermissionAllow, onPermissionDeny, onOpenRemoteAssist, onOpenAgentConfig, onBack,   onClearMessages, onDeleteMessage,
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
   onPreviewImage, onPreviewContact, onFavorite,
-  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, onManageGroup, remoteAssistActive,
+  onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
+  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive,
 }: ChatPageProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -212,7 +220,7 @@ export function ChatPage({
       )}
 
       {/* 消息区 */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-6" style={{ backgroundColor: 'var(--td-bg-color-page)' }}>
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-6" style={{ backgroundColor: 'var(--spark-chat-bg, var(--td-bg-color-page))' }}>
         <div className="flex justify-center py-2 h-8">
           {isLoadingOlder ? (
             <span className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}><Loading size="small" /> 加载更早消息…</span>
@@ -220,15 +228,7 @@ export function ChatPage({
             <span className="text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>上滑加载更早消息</span>
           ) : null}
         </div>
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: 'var(--td-text-color-placeholder)' }}>
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: 'var(--td-bg-color-component)' }}>
-              <MessageCircle size={28} />
-            </div>
-            <div className="text-sm">还没有消息</div>
-            <div className="text-xs mt-1">发条消息开始聊天吧</div>
-          </div>
-        ) : (
+        {loading || messages.length > 0 ? (
           <ChatMessages
             messages={messages}
             contacts={contacts}
@@ -252,8 +252,17 @@ export function ChatPage({
             onPreviewImage={onPreviewImage}
             onPreviewContact={onPreviewContact}
             onFavorite={onFavorite}
+            loading={loading}
             onReply={(id) => setReplyTo(messages.find(m => m.id === id) || null)}
           />
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: 'var(--td-text-color-placeholder)' }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: 'var(--td-bg-color-component)' }}>
+              <MessageCircle size={28} />
+            </div>
+            <div className="text-sm">还没有消息</div>
+            <div className="text-xs mt-1">发条消息开始聊天吧</div>
+          </div>
         )}
         {typingMembers.length > 0 && (
           <div className="flex items-center gap-2 px-1 py-2">
@@ -291,6 +300,12 @@ export function ChatPage({
         replyTo={replyInfo}
         onCancelReply={() => setReplyTo(null)}
         onSendFile={onSendFile}
+        onSendSticker={onSendSticker}
+        onSendLink={onSendLink}
+        onSendVideo={onSendVideo}
+        onSendLocation={onSendLocation}
+        onSendCard={onSendCard}
+        contacts={contacts}
       />
     </div>
   );
