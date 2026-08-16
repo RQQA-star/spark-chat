@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tooltip, Input, Dialog } from 'tdesign-react';
-import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil } from 'lucide-react';
+import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin } from 'lucide-react';
 import { Contact, Conversation } from '../types';
 import { NotifState } from '../lib/notifications';
 import { AddContactDialog } from './AddContactDialog';
@@ -23,6 +23,8 @@ interface SidebarProps {
   onToggleTheme: () => void;
   onEnableNotifications?: () => void;
   notifState?: NotifState;
+  onTogglePin?: (id: string, pinned: boolean) => void;
+  onToggleMute?: (id: string, muted: boolean) => void;
 }
 
 function Avatar({ text, color, size = 40 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -70,7 +72,7 @@ function RailIcon({ children, title, onClick, disabled }: { children: React.Reac
 export function Sidebar({
   conversations, contacts, currentConversationId, onSelectConversation,
   onSelectContact, onCreateGroup, onDeleteConversation, onAddContact, onDeleteContact, onEditContact, onOpenSettings, onOpenSearch, theme, onToggleTheme,
-  onEnableNotifications, notifState = 'default',
+  onEnableNotifications, notifState = 'default', onTogglePin, onToggleMute,
 }: SidebarProps) {
   const [tab, setTab] = useState<'chat' | 'contacts'>('chat');
   const [search, setSearch] = useState('');
@@ -170,7 +172,11 @@ export function Sidebar({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="truncate text-sm font-medium" style={{ color: 'var(--td-text-color-primary)' }}>{conv.title}</span>
+                    <span className="truncate text-sm font-medium flex items-center gap-1" style={{ color: 'var(--td-text-color-primary)' }}>
+                      {conv.pinned && <Pin size={12} style={{ color: '#07c160', flexShrink: 0 }} />}
+                      {conv.title}
+                      {conv.muted && <BellOff size={12} style={{ color: 'var(--td-text-color-placeholder)', flexShrink: 0 }} />}
+                    </span>
                     <span className="text-xs flex-shrink-0 ml-2" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtTime(conv.lastMessage?.createdAt)}</span>
                   </div>
                   <div className="truncate text-xs mt-0.5" style={{ color: 'var(--td-text-color-placeholder)' }}>
@@ -180,15 +186,39 @@ export function Sidebar({
                     {conv.lastMessage ? (conv.lastMessage.senderId === 'me' ? '我: ' : '') + conv.lastMessage.content : '暂无消息'}
                   </div>
                 </div>
-                <Tooltip content="删除会话">
-                  <button
-                    className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                    onClick={e => { e.stopPropagation(); onDeleteConversation(conv.id); }}
-                    style={{ color: 'var(--td-text-color-secondary)' }}
-                  >
-                    <Trash2 />
-                  </button>
-                </Tooltip>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  {onTogglePin && (
+                    <Tooltip content={conv.pinned ? '取消置顶' : '置顶会话'}>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={e => { e.stopPropagation(); onTogglePin(conv.id, !conv.pinned); }}
+                        style={{ color: conv.pinned ? '#07c160' : 'var(--td-text-color-secondary)' }}
+                      >
+                        <Pin size={15} />
+                      </button>
+                    </Tooltip>
+                  )}
+                  {onToggleMute && (
+                    <Tooltip content={conv.muted ? '允许通知' : '消息免打扰'}>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={e => { e.stopPropagation(); onToggleMute(conv.id, !conv.muted); }}
+                        style={{ color: conv.muted ? '#e34d59' : 'var(--td-text-color-secondary)' }}
+                      >
+                        {conv.muted ? <BellOff size={15} /> : <Bell size={15} />}
+                      </button>
+                    </Tooltip>
+                  )}
+                  <Tooltip content="删除会话">
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={e => { e.stopPropagation(); onDeleteConversation(conv.id); }}
+                      style={{ color: 'var(--td-text-color-secondary)' }}
+                    >
+                      <Trash2 />
+                    </button>
+                  </Tooltip>
+                </div>
               </div>
             ))
           )}

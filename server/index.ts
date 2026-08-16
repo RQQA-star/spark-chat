@@ -307,10 +307,12 @@ app.delete("/api/conversations/:id", (req, res) => {
 // 更新会话（群名称 / 头像等）
 app.patch("/api/conversations/:id", (req, res) => {
   try {
-    const updates: { title?: string; avatarText?: string; avatarColor?: string } = {};
+    const updates: { title?: string; avatarText?: string; avatarColor?: string; pinned?: boolean; muted?: boolean } = {};
     if (typeof req.body.title === 'string') updates.title = req.body.title;
     if (typeof req.body.avatarText === 'string') updates.avatarText = req.body.avatarText;
     if (typeof req.body.avatarColor === 'string') updates.avatarColor = req.body.avatarColor;
+    if (typeof req.body.pinned === 'boolean') updates.pinned = req.body.pinned;
+    if (typeof req.body.muted === 'boolean') updates.muted = req.body.muted;
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: '没有可更新的字段' });
     }
@@ -343,7 +345,7 @@ app.get("/api/conversations/:id/messages", (req, res) => {
 
 // 发送通用消息（文本 / 自动回复占位等）。Agent 消息走 /agent 端点。
 // 客户端仅允许发送 text/voice/image；agent/system 由服务端内部写入，禁止客户端伪造。
-const CLIENT_MSG_TYPES = new Set(['text', 'voice', 'image']);
+const CLIENT_MSG_TYPES = new Set(['text', 'voice', 'image', 'file', 'merged']);
 const SERVER_MSG_TYPES = new Set(['agent', 'system']);
 app.post("/api/conversations/:id/messages", (req, res) => {
   try {
@@ -351,7 +353,7 @@ app.post("/api/conversations/:id/messages", (req, res) => {
     const conv = db.getConversation(conversationId);
     if (!conv) return res.status(404).json({ error: '会话不存在' });
 
-    const { senderId, msgType = 'text', content, audioPath, imagePath, duration, meta, transcript } = req.body;
+    const { senderId, msgType = 'text', content, audioPath, imagePath, duration, meta, transcript, fileName, fileSize, fileMime, filePath } = req.body;
     if (!senderId) return res.status(400).json({ error: '缺少 senderId' });
     // 禁止以助手身份发言（助手消息只能由 /agent 端点内部生成）
     if (senderId === AGENT_CONTACT_ID) {
@@ -370,16 +372,26 @@ app.post("/api/conversations/:id/messages", (req, res) => {
     if (msgType === 'voice' && !audioPath) {
       return res.status(400).json({ error: '缺少 audioPath' });
     }
+    if (msgType === 'file' && !fileName) {
+      return res.status(400).json({ error: '缺少 fileName' });
+    }
+    if (msgType === 'file' && !filePath) {
+      return res.status(400).json({ error: '缺少 filePath（文件未上传）' });
+    }
     if (meta !== undefined && (meta === null || typeof meta !== 'object' || Array.isArray(meta))) {
       return res.status(400).json({ error: 'meta 必须为对象' });
     }
     const clientId = typeof req.body.clientId === 'string' ? req.body.clientId : undefined;
     // msgType 已通过 CLIENT_MSG_TYPES 校验，断言为客户端允许的字面量联合类型以通过严格类型检查
-    const safeMsgType = msgType as 'text' | 'voice' | 'image';
+    const safeMsgType = msgType as 'text' | 'voice' | 'image' | 'file' | 'merged';
     const saved = db.createMessage({
       conversationId, senderId, msgType: safeMsgType, content, audioPath, imagePath, duration,
       transcript: typeof transcript === 'string' ? transcript : undefined,
       meta: meta !== undefined ? meta : undefined,
+      fileName: typeof fileName === 'string' ? fileName : undefined,
+      fileSize: typeof fileSize === 'number' ? fileSize : undefined,
+      fileMime: typeof fileMime === 'string' ? fileMime : undefined,
+      filePath: typeof filePath === 'string' ? filePath : undefined,
       id: clientId,
     });
     const message = db.serializeMessage(saved);
@@ -405,6 +417,43 @@ app.get("/api/messages/search", (req, res) => {
   }
 });
 
+// 撤回 / 编辑消息（仅本人发送的消息）
+app.patch("/api/conversations/:id/messages/:msgId", (req, res) => {
+  try {
+    const conversationId = req.params.id;
+    const msgId = req.params.msgId;
+    const { action, senderId, content } = req.body;
+    const msg = db.getMessage(msgId);
+    if (!msg) return res.status(404).json({ error: '消息不存在' });
+    if (msg.conversation_id !== conversationId) return res.status(400).json({ error: '消息与会话不匹配' });
+    if (action === 'recall') {
+      if (msg.sender_id !== senderId) return res.status(403).json({ error: '只能撤回自己发送的消息' });
+      const created = new Date(msg.created_at).getTime();
+      if (Date.now() - created > 2 * 60 * 1000) return res.status(400).json({ error: '超过 2 分钟，无法撤回' });
+      db.recallMessage(msgId);
+      const message = db.serializeMessage(db.getMessage(msgId)!);
+      res.json({ message });
+      wsBroadcast(conversationId, { type: 'message:update', message });
+      const conv = db.getConversation(conversationId);
+      if (conv) wsBroadcast(conversationId, { type: 'conversation:update', conversation: db.serializeConversation(conv) });
+      return;
+    }
+    if (action === 'edit') {
+      if (msg.sender_id !== senderId) return res.status(403).json({ error: '只能编辑自己发送的消息' });
+      if (msg.msg_type !== 'text') return res.status(400).json({ error: '仅支持编辑文本消息' });
+      if (typeof content !== 'string' || !content.trim()) return res.status(400).json({ error: '内容不能为空' });
+      db.editMessage(msgId, content.trim());
+      const message = db.serializeMessage(db.getMessage(msgId)!);
+      res.json({ message });
+      wsBroadcast(conversationId, { type: 'message:update', message });
+      return;
+    }
+    res.status(400).json({ error: '未知 action' });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '操作失败' });
+  }
+});
+
 // 删除单条消息
 app.delete("/api/conversations/:id/messages/:msgId", (req, res) => {
   try {
@@ -412,6 +461,20 @@ app.delete("/api/conversations/:id/messages/:msgId", (req, res) => {
     res.json({ success: ok });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || '删除消息失败' });
+  }
+});
+
+// 表情 reaction（切换：已选则取消）
+app.post("/api/conversations/:id/messages/:msgId/reaction", (req, res) => {
+  try {
+    const { emoji, userId } = req.body;
+    if (!emoji || !userId) return res.status(400).json({ error: '缺少 emoji/userId' });
+    db.toggleReaction(req.params.msgId, emoji, userId);
+    const message = db.serializeMessage(db.getMessage(req.params.msgId)!);
+    res.json({ message });
+    wsBroadcast(req.params.id, { type: 'message:update', message });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '操作失败' });
   }
 });
 
@@ -513,6 +576,45 @@ app.get("/api/image/:file", (req, res) => {
     if (!fs.existsSync(filepath)) return res.status(404).send('not found');
     const ext = file.split('.').pop() || 'png';
     res.setHeader('Content-Type', IMAGE_EXT_CONTENT[ext] || 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    fs.createReadStream(filepath).pipe(res);
+  } catch (error: any) {
+    if (!res.headersSent) res.status(500).send('server error');
+  }
+});
+
+// ============= 文件上传 / 下载（文档 / 压缩包等） =============
+const FILE_MIME_HINT: Record<string, string> = {
+  pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain', zip: 'application/zip', rar: 'application/x-rar-compressed', '7z': 'application/x-7z-compressed',
+  json: 'application/json', mp4: 'video/mp4', mp3: 'audio/mpeg', bin: 'application/octet-stream',
+};
+app.post("/api/file/upload", (req, res) => {
+  try {
+    const { file, ext = 'bin', name = 'file' } = req.body;
+    if (!file || typeof file !== 'string') return res.status(400).json({ error: '缺少 file(base64)' });
+    const cleanExt = String(ext).replace(/[^a-z0-9]/gi, '').toLowerCase() || 'bin';
+    const buffer = Buffer.from(file, 'base64');
+    if (buffer.length > 50 * 1024 * 1024) return res.status(413).json({ error: '文件过大（上限 50MB）' });
+    const filename = `${uuidv4()}.${cleanExt}`;
+    fs.writeFileSync(path.join(db.FILE_UPLOADS_DIR, filename), buffer);
+    res.json({ filePath: filename, name: String(name).slice(0, 200), size: buffer.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '文件上传失败' });
+  }
+});
+
+app.get("/api/file/:file", (req, res) => {
+  try {
+    const file = req.params.file;
+    if (file.includes('..') || file.includes('/') || file.includes('\\')) return res.status(400).send('bad');
+    const filepath = path.join(db.FILE_UPLOADS_DIR, file);
+    if (!fs.existsSync(filepath)) return res.status(404).send('not found');
+    const ext = file.split('.').pop() || 'bin';
+    res.setHeader('Content-Type', FILE_MIME_HINT[ext] || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
     res.setHeader('Cache-Control', 'no-cache');
     fs.createReadStream(filepath).pipe(res);
   } catch (error: any) {

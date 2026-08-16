@@ -54,9 +54,11 @@ export interface Conversation {
   lastMessage?: LastMessage | null;
   messageCount: number;
   unreadCount?: number;
+  pinned?: boolean;
+  muted?: boolean;
 }
 
-export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image';
+export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged';
 
 export interface ToolCall {
   id: string;
@@ -88,6 +90,19 @@ export interface ConvMessage {
   status?: 'sending' | 'sent' | 'failed';
   /** 失败原因（status === 'failed' 时） */
   failReason?: string;
+  /** 撤回（软标记，前端渲染为系统提示） */
+  recalled?: boolean;
+  recalledAt?: string | null;
+  /** 编辑标记 */
+  edited?: boolean;
+  /** 表情 reaction：{ emoji: userId[] } */
+  reactions?: Record<string, string[]> | null;
+  /** 文件消息 */
+  fileName?: string | null;
+  fileSize?: number | null;
+  fileMime?: string | null;
+  /** 文件存储文件名（服务端生成的 uuid 名，用于下载） */
+  filePath?: string | null;
 }
 
 export interface PermissionRequest {

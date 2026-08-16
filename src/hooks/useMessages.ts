@@ -132,6 +132,12 @@ export function useMessages(
             ));
             break;
           }
+          case 'message:update': {
+            const msg = data.message as ConvMessage;
+            if (!msg || msg.conversationId !== conversationId) break;
+            upsert(msg);
+            break;
+          }
           case 'typing': {
             const sid = data.senderId as string;
             const typing = !!data.typing;
@@ -276,6 +282,10 @@ export function useMessages(
       audioPath: (payload.audioPath as string) ?? null,
       duration: (payload.duration as number) ?? null,
       meta: (payload.meta as ConvMessage['meta']) ?? null,
+      fileName: (payload.fileName as string) ?? null,
+      fileSize: (payload.fileSize as number) ?? null,
+      fileMime: (payload.fileMime as string) ?? null,
+      filePath: (payload.filePath as string) ?? null,
       createdAt: new Date().toISOString(),
       status: 'sending',
     };
@@ -360,6 +370,8 @@ export function useMessages(
 
   // 桌面通知：扫描新收到的、@ 我的消息并弹出系统通知（依赖 seenIds 去重，不重复打扰）
   useEffect(() => {
+    // 免打扰会话不弹通知（仍会照常计入未读）
+    if (conversation?.muted) return;
     for (const m of messages) {
       if (seenIds.current.has(m.id)) continue;
       seenIds.current.add(m.id);
@@ -375,7 +387,7 @@ export function useMessages(
         notifyAtMention(senderName, preview, m.conversationId);
       }
     }
-  }, [messages, meId, contacts]);
+  }, [messages, meId, contacts, conversation]);
 
   // 发送消息给 Agent（流式）
   const sendToAgent = useCallback(async (text: string, opts: SendToAgentOptions = {}) => {
@@ -513,10 +525,73 @@ export function useMessages(
     setMessages(prev => prev.filter(m => m.id !== msgId));
   }, [conversationId]);
 
+  // 批量删除消息
+  const deleteMessages = useCallback(async (ids: string[]) => {
+    for (const id of ids) {
+      try { await fetch(`/api/conversations/${conversationId}/messages/${id}`, { method: 'DELETE' }); } catch { /* 忽略单条失败 */ }
+    }
+    setMessages(prev => prev.filter(m => !ids.includes(m.id)));
+  }, [conversationId]);
+
+  // 撤回消息（仅本人、2 分钟窗口由后端校验）
+  const recallMessage = useCallback(async (msgId: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/messages/${msgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'recall', senderId: meId }),
+      });
+      const data = await res.json();
+      if (data.message) setMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...data.message } : m));
+      else if (data.error) console.warn('撤回失败:', data.error);
+    } catch (e) { console.error('撤回失败', e); }
+  }, [conversationId, meId]);
+
+  // 编辑文本消息（仅本人、仅文本）
+  const editMessage = useCallback(async (msgId: string, content: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/messages/${msgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'edit', senderId: meId, content }),
+      });
+      const data = await res.json();
+      if (data.message) setMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...data.message } : m));
+    } catch (e) { console.error('编辑失败', e); }
+  }, [conversationId, meId]);
+
+  // 表情 reaction 切换
+  const toggleReaction = useCallback(async (msgId: string, emoji: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/messages/${msgId}/reaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji, userId: meId }),
+      });
+      const data = await res.json();
+      if (data.message) setMessages(prev => prev.map(m => m.id === msgId ? { ...m, ...data.message } : m));
+    } catch (e) { console.error('reaction 失败', e); }
+  }, [conversationId, meId]);
+
+  // 发送文件消息
+  const sendFile = useCallback(async (base64: string, ext: string, name: string) => {
+    if (!conversationId) return;
+    const up = await fetch('/api/file/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: base64, ext, name }),
+    });
+    const upData = await up.json();
+    if (!upData.filePath) { console.error('文件上传失败'); return; }
+    const msg = await commitClientMessage({ msgType: 'file', fileName: upData.name, fileSize: upData.size, fileMime: null, filePath: upData.filePath });
+    if (msg) triggerAutoReplies('', []);
+  }, [conversationId, commitClientMessage, triggerAutoReplies]);
+
   return {
     messages, loadMessages, sendText, sendVoice, sendImage, sendToAgent, retryMessage,
     loadOlderMessages, hasMoreMessages, isLoadingOlder,
     typingMembers, isAgentThinking, permissionRequest, handleStop, remoteAssistActive,
     handlePermissionAllow, handlePermissionDeny, deleteMessage,
+    recallMessage, editMessage, toggleReaction, sendFile, deleteMessages,
   };
 }

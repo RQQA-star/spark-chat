@@ -30,6 +30,12 @@ if (!fs.existsSync(IMAGE_UPLOADS_DIR)) {
   fs.mkdirSync(IMAGE_UPLOADS_DIR, { recursive: true });
 }
 
+// 普通文件（文档 / 压缩包等）目录
+export const FILE_UPLOADS_DIR = path.join(dataDir, 'file');
+if (!fs.existsSync(FILE_UPLOADS_DIR)) {
+  fs.mkdirSync(FILE_UPLOADS_DIR, { recursive: true });
+}
+
 // 创建数据库连接（显式标注类型，便于 composite 项目生成可命名的声明）
 const db: Database.Database = new Database(dbPath);
 
@@ -112,6 +118,8 @@ export interface DbConversation {
   avatar_color: string | null;
   is_remote_assist: number;     // 0 | 1
   remote_assist_active: number; // 0 | 1
+  pinned: number;               // 0 | 1
+  muted: number;                // 0 | 1
   created_at: string;
   updated_at: string;
 }
@@ -131,6 +139,14 @@ export interface DbMessage {
   meta: string | null;
   read: number;
   read_at: string | null;
+  recalled: number;
+  recalled_at: string | null;
+  edited: number;
+  file_name: string | null;
+  file_size: string | null;
+  file_mime: string | null;
+  file_path: string | null;
+  reactions: string | null;
   created_at: string;
 }
 
@@ -220,6 +236,20 @@ if (!msgCols.some(c => c.name === 'image_path')) {
 if (!msgCols.some(c => c.name === 'read_at')) {
   db.exec("ALTER TABLE messages ADD COLUMN read_at TEXT");
 }
+// 迁移：撤回 / 编辑 / 文件 / 表情 reaction 等扩展字段
+if (!msgCols.some(c => c.name === 'recalled')) db.exec("ALTER TABLE messages ADD COLUMN recalled INTEGER NOT NULL DEFAULT 0");
+if (!msgCols.some(c => c.name === 'recalled_at')) db.exec("ALTER TABLE messages ADD COLUMN recalled_at TEXT");
+if (!msgCols.some(c => c.name === 'edited')) db.exec("ALTER TABLE messages ADD COLUMN edited INTEGER NOT NULL DEFAULT 0");
+if (!msgCols.some(c => c.name === 'file_name')) db.exec("ALTER TABLE messages ADD COLUMN file_name TEXT");
+if (!msgCols.some(c => c.name === 'file_size')) db.exec("ALTER TABLE messages ADD COLUMN file_size TEXT");
+if (!msgCols.some(c => c.name === 'file_mime')) db.exec("ALTER TABLE messages ADD COLUMN file_mime TEXT");
+if (!msgCols.some(c => c.name === 'file_path')) db.exec("ALTER TABLE messages ADD COLUMN file_path TEXT");
+if (!msgCols.some(c => c.name === 'reactions')) db.exec("ALTER TABLE messages ADD COLUMN reactions TEXT");
+
+// 迁移：会话置顶 / 免打扰
+const convCols = db.prepare("PRAGMA table_info(conversations)").all() as { name: string }[];
+if (!convCols.some(c => c.name === 'pinned')) db.exec("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+if (!convCols.some(c => c.name === 'muted')) db.exec("ALTER TABLE conversations ADD COLUMN muted INTEGER NOT NULL DEFAULT 0");
 
 seedIfEmpty();
 
@@ -281,7 +311,7 @@ export function updateContact(
 
 // ============= 会话操作 =============
 export function getAllConversations(): DbConversation[] {
-  return db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC').all() as DbConversation[];
+  return db.prepare('SELECT * FROM conversations ORDER BY pinned DESC, updated_at DESC').all() as DbConversation[];
 }
 
 export function getConversation(id: string): DbConversation | undefined {
@@ -344,13 +374,15 @@ export function createConversation(input: CreateConversationInput): DbConversati
   return getConversation(id)!;
 }
 
-export function updateConversation(id: string, updates: Partial<Pick<DbConversation, 'title' | 'avatar_text' | 'avatar_color' | 'remote_assist_active'>>): boolean {
+export function updateConversation(id: string, updates: Partial<Pick<DbConversation, 'title' | 'avatar_text' | 'avatar_color' | 'remote_assist_active'>> & { pinned?: boolean; muted?: boolean }): boolean {
   const fields: string[] = [];
   const values: any[] = [];
   if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
   if (updates.avatar_text !== undefined) { fields.push('avatar_text = ?'); values.push(updates.avatar_text); }
   if (updates.avatar_color !== undefined) { fields.push('avatar_color = ?'); values.push(updates.avatar_color); }
   if (updates.remote_assist_active !== undefined) { fields.push('remote_assist_active = ?'); values.push(updates.remote_assist_active); }
+  if (updates.pinned !== undefined) { fields.push('pinned = ?'); values.push(updates.pinned ? 1 : 0); }
+  if (updates.muted !== undefined) { fields.push('muted = ?'); values.push(updates.muted ? 1 : 0); }
   if (fields.length === 0) return false;
   fields.push('updated_at = ?');
   values.push(new Date().toISOString());
@@ -391,6 +423,8 @@ export interface SerializedConversation {
   avatarColor: string | null;
   isRemoteAssist: boolean;
   remoteAssistActive: boolean;
+  pinned: boolean;
+  muted: boolean;
   participantIds: string[];
   lastMessage: {
     content: string;
@@ -439,6 +473,8 @@ export function serializeConversation(c: DbConversation): SerializedConversation
     avatarColor: c.avatar_color,
     isRemoteAssist: !!c.is_remote_assist,
     remoteAssistActive: !!c.remote_assist_active,
+    pinned: !!c.pinned,
+    muted: !!c.muted,
     participantIds: getConversationParticipants(c.id),
     lastMessage,
     messageCount: getMessageCount(c.id),
@@ -463,6 +499,14 @@ export function serializeMessage(m: DbMessage) {
     agentSessionId: m.agent_session_id,
     createdAt: m.created_at,
     readAt: m.read_at,
+    recalled: !!m.recalled,
+    recalledAt: m.recalled_at,
+    edited: !!m.edited,
+    fileName: m.file_name,
+    fileSize: m.file_size ? Number(m.file_size) : null,
+    fileMime: m.file_mime,
+    filePath: m.file_path,
+    reactions: m.reactions ? JSON.parse(m.reactions) : null,
     meta: m.meta ? JSON.parse(m.meta) : null,
   };
 }
@@ -533,6 +577,8 @@ export function getAllConversationsSerialized(): SerializedConversation[] {
       avatarColor: c.avatar_color,
       isRemoteAssist: !!c.is_remote_assist,
       remoteAssistActive: !!c.remote_assist_active,
+      pinned: !!c.pinned,
+      muted: !!c.muted,
       participantIds: partMap.get(c.id) || [],
       lastMessage,
       messageCount: countMap.get(c.id) || 0,
@@ -585,7 +631,7 @@ export function getMessagesPage(
 export interface CreateMessageInput {
   conversationId: string;
   senderId: string;
-  msgType: 'text' | 'voice' | 'system' | 'agent' | 'image';
+  msgType: 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged';
   content?: string;
   transcript?: string;
   audioPath?: string;
@@ -594,6 +640,10 @@ export interface CreateMessageInput {
   toolCalls?: string;
   agentSessionId?: string;
   meta?: any;
+  fileName?: string;
+  fileSize?: number;
+  fileMime?: string;
+  filePath?: string;
   /** 可选：由客户端生成的消息 id（用于多端实时同步时前后端共用同一 id，避免重复） */
   id?: string;
 }
@@ -604,8 +654,8 @@ export function createMessage(input: CreateMessageInput): DbMessage {
     const id = inp.id || uuidv4();
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO messages (id, conversation_id, sender_id, msg_type, content, audio_path, image_path, duration, tool_calls, agent_session_id, transcript, meta, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, conversation_id, sender_id, msg_type, content, audio_path, image_path, duration, tool_calls, agent_session_id, transcript, meta, file_name, file_size, file_mime, file_path, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       inp.conversationId,
@@ -619,6 +669,10 @@ export function createMessage(input: CreateMessageInput): DbMessage {
       inp.agentSessionId ?? null,
       inp.transcript ?? null,
       inp.meta !== undefined ? JSON.stringify(inp.meta) : null,
+      inp.fileName ?? null,
+      inp.fileSize ?? null,
+      inp.fileMime ?? null,
+      inp.filePath ?? null,
       now
     );
 
@@ -715,6 +769,44 @@ export function clearConversationMessages(conversationId: string): boolean {
     }
   }
   return true;
+}
+
+// ============= 消息撤回 / 编辑 / 表情 =============
+// 撤回消息（软标记；发送者与 2 分钟窗口由调用方校验）
+export function recallMessage(messageId: string): boolean {
+  const now = new Date().toISOString();
+  return db.prepare('UPDATE messages SET recalled = 1, recalled_at = ? WHERE id = ?').run(now, messageId).changes > 0;
+}
+
+// 编辑文本消息（仅文本类型，标记 edited）
+export function editMessage(messageId: string, content: string): boolean {
+  return db.prepare("UPDATE messages SET content = ?, edited = 1 WHERE id = ? AND msg_type = 'text'").run(content, messageId).changes > 0;
+}
+
+// 表情 reaction：reactions 列存 JSON {emoji: userId[]}；返回最新 JSON 或 null
+export function toggleReaction(messageId: string, emoji: string, userId: string): string | null {
+  const m = getMessage(messageId);
+  if (!m) return null;
+  const map: Record<string, string[]> = m.reactions ? JSON.parse(m.reactions) : {};
+  const list = map[emoji] || [];
+  if (list.includes(userId)) {
+    map[emoji] = list.filter(u => u !== userId);
+    if (map[emoji].length === 0) delete map[emoji];
+  } else {
+    map[emoji] = [...list, userId];
+  }
+  const json = Object.keys(map).length ? JSON.stringify(map) : null;
+  db.prepare('UPDATE messages SET reactions = ? WHERE id = ?').run(json, messageId);
+  return json;
+}
+
+// ============= 会话置顶 / 免打扰 =============
+export function setConversationPinned(id: string, pinned: boolean): boolean {
+  return db.prepare('UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ?').run(pinned ? 1 : 0, new Date().toISOString(), id).changes > 0;
+}
+
+export function setConversationMuted(id: string, muted: boolean): boolean {
+  return db.prepare('UPDATE conversations SET muted = ? WHERE id = ?').run(muted ? 1 : 0, id).changes > 0;
 }
 
 export interface SearchResult {

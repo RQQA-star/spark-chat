@@ -23,7 +23,7 @@ import { getToken, setToken, fetchAuthConfig } from './lib/auth';
 export default function App() {
   const { theme, toggleTheme } = useTheme();
   const { contacts, me, getContact, agentContacts, addContact, deleteContact, updateContact } = useContacts();
-  const { conversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, fetchConversations, applyConversationUpdate } = useConversations();
+  const { conversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, fetchConversations, applyConversationUpdate, setConversationPinned, setConversationMuted } = useConversations();
 
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [groupDialog, setGroupDialog] = useState(false);
@@ -31,7 +31,8 @@ export default function App() {
   const [remoteAssist, setRemoteAssist] = useState(false);
   const [settings, setSettings] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [forwardMsg, setForwardMsg] = useState<ConvMessage | null>(null);
+  // 待转发的内容：可能是单条消息，也可能是多选合并后的「聊天记录」
+  const [pendingForward, setPendingForward] = useState<{ message?: ConvMessage; merged?: { title: string; content: string } } | null>(null);
   const [agentConfigOpen, setAgentConfigOpen] = useState(false);
   const [notifPerm, setNotifPerm] = useState<NotifState>(getNotificationState());
   // 访问令牌引导：服务端启用 SPARK_ACCESS_TOKEN 且本地无令牌时，弹出输入界面
@@ -75,6 +76,7 @@ export default function App() {
     messages, sendText, sendVoice, sendImage, sendToAgent, retryMessage, typingMembers, isAgentThinking,
     permissionRequest, handleStop, handlePermissionAllow, handlePermissionDeny, deleteMessage, loadMessages,
     loadOlderMessages, hasMoreMessages, isLoadingOlder, remoteAssistActive,
+    recallMessage, editMessage, toggleReaction, sendFile, deleteMessages,
   } = useMessages(currentConversation || null, contacts, me.id, applyConversationUpdate);
 
   // 路由发送：Agent 会话走流式，否则普通文本（群聊携带 @ 成员 / 引用回复）
@@ -103,14 +105,51 @@ export default function App() {
     setCurrentConversationId(conversationId);
   }, []);
 
+  const previewOf = (m: ConvMessage): string => {
+    if (m.recalled) return '撤回了一条消息';
+    if (m.msgType === 'voice') return '[语音]';
+    if (m.msgType === 'image') return '[图片]';
+    if (m.msgType === 'file') return `[文件] ${m.fileName || ''}`;
+    if (m.msgType === 'merged') return '[聊天记录]';
+    return (m.content || '').slice(0, 80);
+  };
+
   const handleForward = useCallback((messageId: string) => {
     const m = messages.find(x => x.id === messageId);
-    if (m) setForwardMsg(m);
+    if (m) setPendingForward({ message: m });
   }, [messages]);
 
+  // 多选合并转发：把若干条消息打包成「聊天记录」卡片转发
+  const handleBatchForward = useCallback((ids: string[]) => {
+    const selected = ids.map(id => messages.find(m => m.id === id)).filter(Boolean) as ConvMessage[];
+    if (selected.length === 0) return;
+    const items = selected.map(m => {
+      const senderName = m.senderId === me.id ? '我' : (contacts.find(c => c.id === m.senderId)?.name || '对方');
+      const time = new Date(m.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return { senderName, time, preview: previewOf(m) };
+    });
+    const title = `${currentConversation?.title || '聊天'} 的聊天记录（${items.length} 条）`;
+    setPendingForward({ merged: { title, content: JSON.stringify({ title, items }) } });
+  }, [messages, currentConversation, me.id, contacts]);
+
   const handlePickForward = useCallback(async (targetId: string) => {
-    if (!forwardMsg || !currentConversation) return;
-    const m = forwardMsg;
+    const pending = pendingForward;
+    if (!pending || !currentConversation) { setPendingForward(null); return; }
+    // 合并转发：整段聊天记录作为一条 merged 消息
+    if (pending.merged) {
+      try {
+        await fetch(`/api/conversations/${targetId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ senderId: me.id, msgType: 'merged', content: pending.merged.content }),
+        });
+        fetchConversations();
+      } catch {}
+      setPendingForward(null);
+      return;
+    }
+    const m = pending.message;
+    if (!m) { setPendingForward(null); return; }
     const payload: any = {
       senderId: me.id,
       meta: { forwardedFromName: currentConversation.title },
@@ -150,8 +189,8 @@ export default function App() {
       });
       fetchConversations();
     } catch {}
-    setForwardMsg(null);
-  }, [forwardMsg, currentConversation, me.id, fetchConversations]);
+    setPendingForward(null);
+  }, [pendingForward, currentConversation, me.id, fetchConversations]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ backgroundColor: 'var(--td-bg-color-page)' }}>
@@ -172,6 +211,8 @@ export default function App() {
         onToggleTheme={toggleTheme}
         onEnableNotifications={enableNotifications}
         notifState={notifPerm}
+        onTogglePin={setConversationPinned}
+        onToggleMute={setConversationMuted}
       />
 
       <main className="flex-1 flex flex-col min-w-0 h-full">
@@ -197,6 +238,12 @@ export default function App() {
             onClearMessages={() => { if (currentConversation) clearMessages(currentConversation.id); }}
             onDeleteMessage={deleteMessage}
             onForward={handleForward}
+            onEditMessage={editMessage}
+            onRecallMessage={recallMessage}
+            onToggleReaction={toggleReaction}
+            onDeleteMessages={deleteMessages}
+            onBatchForward={handleBatchForward}
+            onSendFile={sendFile}
             onRetry={retryMessage}
             typingMembers={typingMembers}
             loadOlderMessages={loadOlderMessages}
@@ -251,10 +298,10 @@ export default function App() {
       />
 
       <ForwardDialog
-        visible={!!forwardMsg}
+        visible={!!pendingForward}
         conversations={conversations}
         currentConversationId={currentConversationId}
-        onClose={() => setForwardMsg(null)}
+        onClose={() => setPendingForward(null)}
         onPick={handlePickForward}
       />
 

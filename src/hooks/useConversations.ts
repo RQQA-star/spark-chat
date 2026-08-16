@@ -92,5 +92,25 @@ export function useConversations() {
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, ...conv } : c));
   }, []);
 
-  return { conversations, loading, fetchConversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, applyConversationUpdate };
+  const setConversationPinned = useCallback(async (id: string, pinned: boolean) => {
+    const res = await fetch(`/api/conversations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned }),
+    });
+    const data = await res.json();
+    if (data.conversation) setConversations(prev => prev.map(c => c.id === id ? { ...c, pinned: !!data.conversation.pinned } : c));
+  }, []);
+
+  const setConversationMuted = useCallback(async (id: string, muted: boolean) => {
+    const res = await fetch(`/api/conversations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ muted }),
+    });
+    const data = await res.json();
+    if (data.conversation) setConversations(prev => prev.map(c => c.id === id ? { ...c, muted: !!data.conversation.muted } : c));
+  }, []);
+
+  return { conversations, loading, fetchConversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, applyConversationUpdate, setConversationPinned, setConversationMuted };
 }

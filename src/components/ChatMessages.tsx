@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import { Loading } from 'tdesign-react';
 import { ChatMarkdown } from '@tdesign-react/chat';
-import { Bot, User, Trash2, Forward, Reply, RefreshCw } from 'lucide-react';
+import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, MoreVertical, File as FileIcon, Pencil } from 'lucide-react';
 import { ConvMessage, Contact, PermissionRequest } from '../types';
 import { ToolCallsCollapse } from './ToolCallsCollapse';
 import { InlinePermissionCard } from './InlinePermissionCard';
@@ -20,7 +20,15 @@ interface ChatMessagesProps {
   onForward?: (id: string) => void;
   onReply?: (id: string) => void;
   onRetry?: (id: string) => void;
+  onEdit?: (id: string, content: string) => void;
+  onRecall?: (id: string) => void;
+  onToggleReaction?: (id: string, emoji: string) => void;
   scrollRef?: React.RefObject<HTMLDivElement>;
+  // 多选模式
+  multiSelect?: boolean;
+  selection?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onEnterMultiSelect?: (id: string) => void;
 }
 
 function fmtClock(iso: string) {
@@ -38,6 +46,12 @@ function fmtDate(iso: string) {
 }
 function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
+}
+function fmtSize(bytes?: number | null) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // 将文本中被 @ 的成员名渲染为高亮（依据消息 meta.mentions）
@@ -62,6 +76,17 @@ function renderText(content: string, msg: ConvMessage, contacts: Contact[]): Rea
   return parts;
 }
 
+function previewOf(m: ConvMessage): string {
+  if (m.recalled) return '撤回了一条消息';
+  if (m.msgType === 'voice') return '[语音]';
+  if (m.msgType === 'image') return '[图片]';
+  if (m.msgType === 'file') return `[文件] ${m.fileName || ''}`;
+  if (m.msgType === 'merged') return '[聊天记录]';
+  return (m.content || '').slice(0, 80);
+}
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😍', '🎉', '😢'];
+
 // 图片气泡：加载失败时回退为占位块，避免「裂图」破坏对称布局
 function ImageBubble({ imagePath }: { imagePath: string }) {
   const [err, setErr] = useState(false);
@@ -83,15 +108,101 @@ function ImageBubble({ imagePath }: { imagePath: string }) {
   );
 }
 
+// 文件卡片
+function FileBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
+  const ext = (msg.fileName || '').split('.').pop()?.toUpperCase() || 'FILE';
+  return (
+    <a
+      href={`/api/file/${msg.filePath || msg.fileName}`}
+      download={msg.fileName || 'file'}
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[220px] max-w-[280px] no-underline"
+      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-component)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+    >
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#0052d9', color: '#fff' }}>
+        <FileIcon size={20} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm truncate font-medium">{msg.fileName}</div>
+        <div className="text-[11px] opacity-70">{ext} · {fmtSize(msg.fileSize)}</div>
+      </div>
+    </a>
+  );
+}
+
+// 合并转发（聊天记录）卡片
+function MergedBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
+  let data: { title?: string; items?: { senderName: string; time: string; preview: string }[] } | null = null;
+  try { data = JSON.parse(msg.content || '{}'); } catch { data = null; }
+  const items = data?.items || [];
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, 4);
+  return (
+    <div
+      className="rounded-lg overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
+      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-container)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      onClick={() => setExpanded(v => !v)}
+    >
+      <div className="px-3 py-2 font-medium text-sm border-b" style={{ borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'var(--td-component-stroke)' }}>
+        {data?.title || '聊天记录'}
+      </div>
+      <div className="px-3 py-2 flex flex-col gap-1.5">
+        {shown.map((it, i) => (
+          <div key={i} className="text-xs leading-snug">
+            <span style={{ color: isMe ? '#fff' : '#0052d9', fontWeight: 600 }}>{it.senderName}</span>
+            <span className="opacity-60 mx-1">{it.time}</span>
+            <span className="opacity-80">{it.preview}</span>
+          </div>
+        ))}
+        {!expanded && items.length > 4 && <div className="text-xs opacity-60">…等 {items.length} 条记录</div>}
+        {expanded && items.length > 4 && <div className="text-xs opacity-60">点击收起</div>}
+      </div>
+    </div>
+  );
+}
+
+function Reactions({ msg, meId, onToggle }: { msg: ConvMessage; meId: string; onToggle: (e: string) => void }) {
+  const map = msg.reactions || {};
+  const entries = Object.entries(map).filter(([, ids]) => (ids as string[]).length > 0);
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {entries.map(([emoji, ids]) => {
+        const arr = ids as string[];
+        const mine = arr.includes(meId);
+        return (
+          <button
+            key={emoji}
+            onClick={(e) => { e.stopPropagation(); onToggle(emoji); }}
+            className="px-1.5 py-0.5 rounded-full text-xs flex items-center gap-0.5 border"
+            style={{
+              borderColor: mine ? '#07c160' : 'var(--td-component-stroke)',
+              backgroundColor: mine ? 'rgba(7,193,96,0.12)' : 'var(--td-bg-color-component)',
+              color: 'var(--td-text-color-primary)',
+            }}
+          >
+            <span>{emoji}</span>
+            <span className="opacity-70">{arr.length}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ChatMessages({
-  messages, contacts, meId, isGroup, messagesEndRef,   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, scrollRef,
+  messages, contacts, meId, isGroup, messagesEndRef,
+  permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, scrollRef,
+  multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
 }: ChatMessagesProps) {
   const getContact = (id: string): Contact | undefined => contacts.find(c => c.id === id);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [reactionFor, setReactionFor] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const longPressRef = useRef<number | null>(null);
 
   useEffect(() => {
     const container = scrollRef?.current;
     if (container) {
-      // 仅当用户已靠近底部时才自动滚到底部；在顶部加载历史时保持原位
       const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
       if (nearBottom) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     } else {
@@ -99,8 +210,49 @@ export function ChatMessages({
     }
   }, [messages, messagesEndRef, scrollRef]);
 
+  const canRecall = (msg: ConvMessage) => {
+    if (msg.senderId !== meId || msg.recalled) return false;
+    if (msg.msgType === 'system' || msg.msgType === 'agent') return false;
+    return Date.now() - new Date(msg.createdAt).getTime() < 2 * 60 * 1000;
+  };
+  const canEdit = (msg: ConvMessage) => msg.senderId === meId && msg.msgType === 'text' && !msg.recalled;
+
+  const openMenu = (e: React.MouseEvent | React.TouchEvent, id: string) => {
+    e.preventDefault();
+    const pt = 'clientX' in e ? e : { clientX: (e as React.TouchEvent).touches[0].clientX, clientY: (e as React.TouchEvent).touches[0].clientY };
+    setMenu({ id, x: pt.clientX, y: pt.clientY });
+  };
+
+  const copyText = (msg: ConvMessage) => {
+    const text = msg.msgType === 'text' ? (msg.content || '') : previewOf(msg);
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setMenu(null);
+  };
+
+  const startEdit = (msg: ConvMessage) => {
+    setEditingId(msg.id);
+    setEditText(msg.content || '');
+    setMenu(null);
+  };
+  const commitEdit = (id: string) => {
+    if (onEdit && editText.trim()) onEdit(id, editText.trim());
+    setEditingId(null);
+  };
+
+  const menuItems = (msg: ConvMessage) => {
+    const items: { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }[] = [];
+    if (onReply) items.push({ label: '回复', icon: <Reply size={14} />, onClick: () => { onReply(msg.id); setMenu(null); } });
+    if (onForward) items.push({ label: '转发', icon: <Forward size={14} />, onClick: () => { onForward(msg.id); setMenu(null); } });
+    if (msg.msgType === 'text') items.push({ label: '复制', icon: <Copy size={14} />, onClick: () => copyText(msg) });
+    if (canEdit(msg)) items.push({ label: '编辑', icon: <Pencil size={14} />, onClick: () => startEdit(msg) });
+    if (canRecall(msg) && onRecall) items.push({ label: '撤回', icon: <Reply size={14} style={{ transform: 'scaleX(-1)' }} />, onClick: () => { onRecall(msg.id); setMenu(null); } });
+    items.push({ label: '多选', icon: <Check size={14} />, onClick: () => { onEnterMultiSelect(msg.id); setMenu(null); } });
+    if (onDeleteMessage) items.push({ label: '删除', icon: <Trash2 size={14} />, onClick: () => { onDeleteMessage(msg.id); setMenu(null); }, danger: true });
+    return items;
+  };
+
   return (
-    <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full">
+    <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full" onClick={() => { setMenu(null); setReactionFor(null); }}>
       {messages.map((msg, i) => {
         const prev = i > 0 ? messages[i - 1] : null;
         const showDivider = !prev || !isSameDay(prev.createdAt, msg.createdAt);
@@ -111,6 +263,21 @@ export function ChatMessages({
             </span>
           </div>
         ) : null;
+
+        // 撤回：渲染为系统提示
+        if (msg.recalled) {
+          const who = msg.senderId === meId ? '你' : (getContact(msg.senderId)?.name || '对方');
+          return (
+            <Fragment key={msg.id}>
+              {divider}
+              <div className="flex justify-center">
+                <span className="text-xs px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+                  {who} 撤回了一条消息
+                </span>
+              </div>
+            </Fragment>
+          );
+        }
 
         if (msg.msgType === 'system') {
           return (
@@ -130,36 +297,56 @@ export function ChatMessages({
         const name = isMe ? '我' : (contact?.name || '未知');
         const avatarText = isMe ? '我' : (contact?.avatarText || '?');
         const avatarColor = isMe ? '#07c160' : (contact?.avatarColor || '#888');
+        const selected = multiSelect && selection.has(msg.id);
 
         const bubbleStyle = isMe
           ? { backgroundColor: '#07c160', color: '#fff', borderRadius: '14px 14px 4px 14px', opacity: msg.status === 'failed' ? 0.6 : 1 }
           : { backgroundColor: 'var(--td-bg-color-container)', color: 'var(--td-text-color-primary)', borderRadius: '14px 14px 14px 4px', opacity: msg.status === 'failed' ? 0.6 : 1 };
 
+        const onBubbleClick = () => {
+          if (multiSelect) { onToggleSelect(msg.id); return; }
+        };
+
         return (
           <Fragment key={msg.id}>
             {divider}
-            <div id={`msg-${msg.id}`} className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
-              {/* 头像 */}
-              <div
-                className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white"
-                style={{ backgroundColor: avatarColor, fontSize: 14 }}
-              >
-                {isMe ? <User size={16} /> : (contact?.isAgent ? <Bot size={16} /> : avatarText)}
-              </div>
+            <div
+              id={`msg-${msg.id}`}
+              className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''} ${selected ? 'rounded-xl px-1' : ''}`}
+              style={selected ? { backgroundColor: 'rgba(7,193,96,0.12)' } : undefined}
+              onContextMenu={(e) => openMenu(e, msg.id)}
+              onTouchStart={() => { longPressRef.current = window.setTimeout(() => openMenu({ clientX: 0, clientY: 0 } as any, msg.id), 500); }}
+              onTouchEnd={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
+            >
+              {/* 头像 / 多选勾选 */}
+              {multiSelect ? (
+                <button
+                  onClick={() => onToggleSelect(msg.id)}
+                  className="w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center border-2 mt-0.5"
+                  style={{ borderColor: selected ? '#07c160' : 'var(--td-component-stroke)', backgroundColor: selected ? '#07c160' : 'transparent', color: '#fff' }}
+                >
+                  {selected && <Check size={16} />}
+                </button>
+              ) : (
+                <div
+                  className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white"
+                  style={{ backgroundColor: avatarColor, fontSize: 14 }}
+                >
+                  {isMe ? <User size={16} /> : (contact?.isAgent ? <Bot size={16} /> : avatarText)}
+                </div>
+              )}
 
               <div className={`flex flex-col gap-1 max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
-                {isGroup && !isMe && (
+                {isGroup && !isMe && !multiSelect && (
                   <span className="text-xs px-1" style={{ color: 'var(--td-text-color-placeholder)' }}>{name}</span>
                 )}
 
-                {/* 转发来源徽标 */}
                 {msg.meta?.forwardedFromName && (
                   <span className="text-[11px] px-1 flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}>
                     <Forward size={11} /> 转发自 {msg.meta.forwardedFromName}
                   </span>
                 )}
 
-                {/* 引用回复块 */}
                 {msg.meta?.quote && (
                   <div
                     onClick={() => document.getElementById(`msg-${msg.meta!.quote!.messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
@@ -171,110 +358,128 @@ export function ChatMessages({
                   </div>
                 )}
 
-                {/* 文本 */}
-                {msg.msgType === 'text' && (
-                  <div className="px-3.5 py-2.5 leading-relaxed break-words text-[15px] whitespace-pre-wrap" style={bubbleStyle}>
-                    {renderText(msg.content || '', msg, contacts)}
-                  </div>
-                )}
-
-                {/* 语音 */}
-                {msg.msgType === 'voice' && msg.audioPath && (
-                  <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }}>
-                    <div style={{ color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}>
-                      <VoiceMessage audioPath={msg.audioPath} duration={msg.duration} transcript={msg.transcript} />
+                {/* 编辑态 */}
+                {editingId === msg.id ? (
+                  <div className="flex flex-col gap-1 w-full" style={bubbleStyle}>
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      autoFocus
+                      rows={2}
+                      className="w-full bg-transparent outline-none resize-none px-3 py-2 text-[15px]"
+                      style={{ color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+                    />
+                    <div className="flex justify-end gap-2 px-2 pb-2">
+                      <button onClick={() => setEditingId(null)} className="text-xs px-2 py-1 rounded" style={{ color: isMe ? '#fff' : 'var(--td-text-color-secondary)' }}>取消</button>
+                      <button onClick={() => commitEdit(msg.id)} className="text-xs px-2 py-1 rounded" style={{ color: '#fff', backgroundColor: '#07c160' }}>保存</button>
                     </div>
                   </div>
-                )}
-
-                {/* 图片 */}
-                {msg.msgType === 'image' && msg.imagePath && (
-                  <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }}>
-                    <ImageBubble imagePath={msg.imagePath} />
-                  </div>
-                )}
-
-                {/* Agent 消息（含工具调用） */}
-                {msg.msgType === 'agent' && (
-                  <div className="flex flex-col gap-2" style={{ ...bubbleStyle, maxWidth: '100%' }}>
-                    {msg.content ? (
-                      <div className="px-3.5 py-2.5 leading-relaxed break-words text-[15px] chat-markdown" style={{ color: 'var(--td-text-color-primary)' }}>
-                        <ChatMarkdown content={msg.content} />
-                      </div>
-                    ) : msg.isStreaming ? (
-                      <div className="px-3.5 py-2.5 flex items-center gap-2" style={{ color: 'var(--td-text-color-secondary)' }}>
-                        <Loading size="small" /> 思考中…
-                      </div>
-                    ) : null}
-                    {msg.toolCalls && msg.toolCalls.length > 0 && (
-                      <div className="px-3 pb-2">
-                        <ToolCallsCollapse toolCalls={msg.toolCalls} isStreaming={msg.isStreaming} />
+                ) : (
+                  <>
+                    {msg.msgType === 'text' && (
+                      <div className="px-3.5 py-2.5 leading-relaxed break-words text-[15px] whitespace-pre-wrap" style={bubbleStyle} onClick={onBubbleClick}>
+                        {renderText(msg.content || '', msg, contacts)}
+                        {msg.edited && <span className="text-[10px] opacity-60 ml-1">(已编辑)</span>}
                       </div>
                     )}
-                  </div>
+
+                    {msg.msgType === 'voice' && msg.audioPath && (
+                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                        <div style={{ color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}>
+                          <VoiceMessage audioPath={msg.audioPath} duration={msg.duration} transcript={msg.transcript} />
+                        </div>
+                      </div>
+                    )}
+
+                    {msg.msgType === 'image' && msg.imagePath && (
+                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                        <ImageBubble imagePath={msg.imagePath} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'file' && (
+                      <div onClick={onBubbleClick}>
+                        <FileBubble msg={msg} isMe={isMe} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'merged' && (
+                      <div onClick={onBubbleClick}>
+                        <MergedBubble msg={msg} isMe={isMe} />
+                      </div>
+                    )}
+
+                    {msg.msgType === 'agent' && (
+                      <div className="flex flex-col gap-2" style={{ ...bubbleStyle, maxWidth: '100%' }}>
+                        {msg.content ? (
+                          <div className="px-3.5 py-2.5 leading-relaxed break-words text-[15px] chat-markdown" style={{ color: 'var(--td-text-color-primary)' }}>
+                            <ChatMarkdown content={msg.content} />
+                          </div>
+                        ) : msg.isStreaming ? (
+                          <div className="px-3.5 py-2.5 flex items-center gap-2" style={{ color: 'var(--td-text-color-secondary)' }}>
+                            <Loading size="small" /> 思考中…
+                          </div>
+                        ) : null}
+                        {msg.toolCalls && msg.toolCalls.length > 0 && (
+                          <div className="px-3 pb-2">
+                            <ToolCallsCollapse toolCalls={msg.toolCalls} isStreaming={msg.isStreaming} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
 
-                <span className="text-[11px] px-1" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtClock(msg.createdAt)}</span>
-                {isMe && (msg.msgType === 'text' || msg.msgType === 'voice' || msg.msgType === 'image') && (
-                  msg.status === 'sending' ? (
-                    <span className="text-[11px] px-1 inline-flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}>
-                      <Loading size="small" /> 发送中…
-                    </span>
-                  ) : msg.status === 'failed' ? (
-                    <span className="text-[11px] px-1 inline-flex items-center gap-1.5">
-                      <span style={{ color: '#e34d59' }}>发送失败</span>
-                      {onRetry && (
-                        <button
-                          onClick={() => onRetry(msg.id)}
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:opacity-80"
-                          style={{ color: '#fff', backgroundColor: '#e34d59' }}
-                          title="点击重试"
-                        >
-                          <RefreshCw size={11} /> 重试
-                        </button>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] px-1" style={{ color: msg.readAt ? '#07c160' : 'var(--td-text-color-placeholder)' }}>
-                      {msg.readAt ? '已读' : '已送达'}
-                    </span>
-                  )
-                )}
-                {msg.meta?.mentions?.includes(meId) && (
-                  <span className="text-[11px] px-1 rounded" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
+                {/* 时间 / 状态 / reaction */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-[11px] px-1" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtClock(msg.createdAt)}</span>
+                  {isMe && (msg.msgType === 'text' || msg.msgType === 'voice' || msg.msgType === 'image' || msg.msgType === 'file') && (
+                    msg.status === 'sending' ? (
+                      <span className="text-[11px] px-1 inline-flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}>
+                        <Loading size="small" /> 发送中…
+                      </span>
+                    ) : msg.status === 'failed' ? (
+                      <span className="text-[11px] px-1 inline-flex items-center gap-1.5">
+                        <span style={{ color: '#e34d59' }}>发送失败</span>
+                        {onRetry && (
+                          <button onClick={() => onRetry(msg.id)} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:opacity-80" style={{ color: '#fff', backgroundColor: '#e34d59' }} title="点击重试">
+                            <RefreshCw size={11} /> 重试
+                          </button>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] px-1" style={{ color: msg.readAt ? '#07c160' : 'var(--td-text-color-placeholder)' }}>
+                        {msg.readAt ? '已读' : '已送达'}
+                      </span>
+                    )
+                  )}
+                  {msg.meta?.mentions?.includes(meId) && (
+                    <span className="text-[11px] px-1 rounded" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
+                  )}
+                </div>
+
+                {onToggleReaction && (msg.msgType === 'text' || msg.msgType === 'voice' || msg.msgType === 'image' || msg.msgType === 'file') && !multiSelect && (
+                  <Reactions msg={msg} meId={meId} onToggle={(e) => onToggleReaction(msg.id, e)} />
                 )}
               </div>
 
-              {/* hover 操作：回复 / 转发 / 删除 */}
-              {onReply && (
-                <button
-                  onClick={() => onReply(msg.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity self-center p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]"
-                  style={{ color: 'var(--td-text-color-placeholder)' }}
-                  title="回复消息"
-                >
-                  <Reply size={15} />
-                </button>
+              {/* hover 操作栏：回复 / 转发 / 更多 */}
+              {!multiSelect && (onReply || onForward || onDeleteMessage) && (
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity self-center flex items-center gap-0.5">
+                  {onReply && <button onClick={() => onReply(msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-placeholder)' }} title="回复"><Reply size={15} /></button>}
+                  {onForward && <button onClick={() => onForward(msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-placeholder)' }} title="转发"><Forward size={15} /></button>}
+                  {onToggleReaction && <button onClick={(e) => { e.stopPropagation(); setReactionFor(reactionFor === msg.id ? null : msg.id); }} className="p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-placeholder)' }} title="表情"><Smile size={15} /></button>}
+                  <button onClick={(e) => openMenu(e, msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-placeholder)' }} title="更多"><MoreVertical size={15} /></button>
+                </div>
               )}
-              {onForward && (
-                <button
-                  onClick={() => onForward(msg.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity self-center p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]"
-                  style={{ color: 'var(--td-text-color-placeholder)' }}
-                  title="转发消息"
-                >
-                  <Forward size={15} />
-                </button>
-              )}
-              {onDeleteMessage && (
-                <button
-                  onClick={() => onDeleteMessage(msg.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity self-center p-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]"
-                  style={{ color: 'var(--td-text-color-placeholder)' }}
-                  title="删除消息"
-                >
-                  <Trash2 size={15} />
-                </button>
+
+              {/* 添加 reaction 面板 */}
+              {reactionFor === msg.id && onToggleReaction && (
+                <div className="absolute z-30 flex gap-1 p-1 rounded-full shadow-lg" style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }} onClick={(e) => e.stopPropagation()}>
+                  {REACTION_EMOJIS.map(em => (
+                    <button key={em} onClick={() => { onToggleReaction(msg.id, em); setReactionFor(null); }} className="text-lg hover:scale-125 transition-transform">{em}</button>
+                  ))}
+                </div>
               )}
             </div>
           </Fragment>
@@ -289,6 +494,26 @@ export function ChatMessages({
       )}
 
       <div ref={messagesEndRef} />
+
+      {/* 长按 / 右键菜单 */}
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+          <div className="fixed z-50 min-w-[120px] rounded-xl shadow-xl py-1" style={{ top: menu.y, left: menu.x, backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}>
+            {menuItems(messages.find(m => m.id === menu.id)!).map((it, idx) => (
+              <button
+                key={idx}
+                onClick={it.onClick}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--td-bg-color-component-hover)]"
+                style={{ color: it.danger ? '#e34d59' : 'var(--td-text-color-primary)' }}
+              >
+                {it.icon}
+                {it.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

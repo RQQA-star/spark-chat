@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Button } from 'tdesign-react';
-import { Mic, MicOff, Send, Square, X, Check, Smile, Image as ImageIcon } from 'lucide-react';
+import { Mic, MicOff, Send, Square, X, Check, Smile, Image as ImageIcon, File as FileIcon } from 'lucide-react';
 import { Contact } from '../types';
 import { useVoice, blobToBase64, blobExt } from '../hooks/useVoice';
 
@@ -22,6 +22,7 @@ interface ChatInputProps {
   meId?: string;
   replyTo?: ReplyInfo | null;
   onCancelReply?: () => void;
+  onSendFile?: (base64: string, ext: string, name: string) => void;
 }
 
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','🤔','😎','😭','😅','🙄','👍','👎','👏','🙏','💪','🎉','🔥','❤️','💔','✨','🌹','🌟','🍻','☕','🚀','💡','✅','❌'];
@@ -31,10 +32,11 @@ function fmtDur(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply }: ChatInputProps) {
+export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const anyFileRef = useRef<HTMLInputElement>(null);
   const { recording, durationMs, levels, startRecording, stopRecording, cancelRecording } = useVoice();
   const uploadingRef = useRef(false);
   const pressStartedRef = useRef(false);
@@ -67,6 +69,22 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
       const base64 = result.split(',')[1] || '';
       const ext = file.name.split('.').pop() || 'png';
       onSendImage(base64, ext);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 选择任意文件 -> base64 -> 上传
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) { alert('文件过大（上限 50MB）'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || '';
+      const ext = file.name.split('.').pop() || 'bin';
+      onSendFile?.(base64, ext, file.name);
     };
     reader.readAsDataURL(file);
   };
@@ -211,6 +229,15 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             <ImageIcon size={18} />
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImagePick} />
+          <button
+            onClick={() => anyFileRef.current?.click()}
+            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+            style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
+            title="发送文件"
+          >
+            <FileIcon size={18} />
+          </button>
+          <input ref={anyFileRef} type="file" className="hidden" onChange={handleFilePick} />
 
           {/* 录音按钮（按住说话：按下开始 / 松开发送 / 上滑取消） */}
           <button
