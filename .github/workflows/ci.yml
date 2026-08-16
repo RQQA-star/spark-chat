@@ -1,0 +1,83 @@
+# 星火聊天 (spark-chat) CI
+# 触发：推送到 main / 发起 PR 到 main
+# 步骤：依赖安装 → 类型检查 → 测试 → 前端构建 → 端到端冒烟（真实浏览器）
+# 说明：vitest 配置已自适应——本机 Windows 走隔离 jsdom 副本，CI Linux 走标准 node_modules/jsdom。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖（legacy-peer-deps 由 .npmrc 控制）
+        # 使用 npm install：本机杀软会锁定 npm 缓存，无法在本地重新生成完整 lock；
+        # CI 环境网络可用，npm install 可正常解析全部依赖。
+        run: npm install --legacy-peer-deps
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 测试
+        run: npm test
+
+      - name: 前端构建
+        run: npm run build
+
+  e2e:
+    # 真实浏览器端到端冒烟：启动 API+SQLite+React 全链路，用 playwright-core 驱动 chromium 断言。
+    # 默认（GitHub 海外 runner）cdn.playwright.dev 与 deb.debian.org 可达；
+    # 国内自托管 runner 请改用 PLAYWRIGHT_DOWNLOAD_HOST=npmmirror + 清华 apt 镜像（见 spark-e2e-container 技能）。
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm install --legacy-peer-deps
+
+      - name: 前端构建
+        run: npm run build
+
+      - name: 安装 Playwright Chromium（含系统依赖）
+        # 不锁版本：与 npm 解析出的 @playwright/test 同取最新 1.x，浏览器修订号一致，避免版本错配。
+        run: npx playwright install --with-deps chromium
+
+      - name: 启动服务并跑端到端冒烟
+        # 同一步内启动服务（后台）→ 轮询 /api/health → 跑浏览器冒烟 → 回收服务进程。
+        # e2e/auth-e2e.mjs 默认 notoken 模式、基准 http://127.0.0.1:3000，断言星火助手/通讯录/零令牌副作用。
+        run: |
+          node --import tsx server/index.ts > /tmp/spark-server.log 2>&1 &
+          SRV=$!
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/api/health; then echo "server up"; break; fi
+            sleep 1
+          done
+          node e2e/auth-e2e.mjs
+          RC=$?
+          kill $SRV 2>/dev/null
+          if [ $RC -ne 0 ]; then echo "---- server log ----"; cat /tmp/spark-server.log; fi
+          exit $RC
+        env:
+          HOST: 127.0.0.1
+          PORT: 3000
+          NODE_ENV: production

@@ -1,0 +1,29 @@
+# 版本控制与编辑器
+.git
+.gitignore
+.github
+
+# 依赖与构建缓存（镜像内重新安装/构建）
+node_modules
+dist
+tsbuild-cache
+.npm-cache
+
+# 本机杀软规避隔离目录（仅本机 Windows 需要，容器内用标准 node_modules）
+.spark-jsdom
+spark-test-deps
+
+# 开发期数据库与上传文件（运行时用卷持久化，不打包开发数据）
+data
+
+# 日志与临时文件
+*.log
+*.tmp
+.spark-jsdom
+vitest.config.ts.timestamp-*.mjs
+spark-vitest.log
+# 本地冒烟验证脚本（开发期复用，不打包进镜像）
+.smoke.mjs
+
+# 本地环境（容器内用 env_file / -e 注入）
+.env

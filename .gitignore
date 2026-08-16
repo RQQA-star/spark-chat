@@ -1,0 +1,43 @@
+# 依赖
+node_modules/
+spark-test-deps/
+native-assistant/node_modules/
+
+# 构建产物
+dist/
+tsbuild-cache/
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+*.timestamp-*.mjs
+
+# 本地数据库与上传文件
+data/
+
+# 本机杀软规避隔离目录（仅本机 Windows 需要）
+.spark-jsdom/
+
+# 本机 npm 缓存（非依赖，不应入库）
+.npm-cache/
+
+# 日志与临时文件
+*.log
+*.tmp
+spark-vitest.log
+
+# 本地环境
+.env
+.env.*
+!.env.example
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+
+# Playwright E2E 产物
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.last-run.json

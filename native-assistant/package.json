@@ -1,0 +1,14 @@
+{
+  "name": "spark-chat-native-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "原生键鼠注入助手：接收被控端浏览器转发来的控制事件，注入真实 OS 输入",
+  "scripts": {
+    "start": "node assist-helper.js"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "ws": "^8.18.0"
+  }
+}

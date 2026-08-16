@@ -1,0 +1,334 @@
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Button } from 'tdesign-react';
+import { Bot, Users, MessageCircle } from 'lucide-react';
+
+import { useTheme } from './hooks/useTheme';
+import { useContacts } from './hooks/useContacts';
+import { useConversations } from './hooks/useConversations';
+import { useMessages } from './hooks/useMessages';
+
+import { Sidebar } from './components/Sidebar';
+import { ChatPage } from './pages/ChatPage';
+import { NewGroupDialog } from './components/NewGroupDialog';
+import { GroupManagePanel } from './components/GroupManagePanel';
+import { RemoteAssistPanel } from './components/RemoteAssistPanel';
+import { SettingsPanel } from './components/SettingsPanel';
+import { SearchModal } from './components/SearchModal';
+import { ForwardDialog } from './components/ForwardDialog';
+import { AgentConfigDialog } from './components/AgentConfigDialog';
+import { Conversation, ConvMessage, QuoteRef } from './types';
+import { getNotificationState, requestNotificationPermission, setActivateHandler, setActiveConversation, NotifState } from './lib/notifications';
+import { getToken, setToken, fetchAuthConfig } from './lib/auth';
+
+export default function App() {
+  const { theme, toggleTheme } = useTheme();
+  const { contacts, me, getContact, agentContacts, addContact, deleteContact, updateContact } = useContacts();
+  const { conversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, fetchConversations, applyConversationUpdate } = useConversations();
+
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [groupDialog, setGroupDialog] = useState(false);
+  const [groupManage, setGroupManage] = useState(false);
+  const [remoteAssist, setRemoteAssist] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [forwardMsg, setForwardMsg] = useState<ConvMessage | null>(null);
+  const [agentConfigOpen, setAgentConfigOpen] = useState(false);
+  const [notifPerm, setNotifPerm] = useState<NotifState>(getNotificationState());
+  // 访问令牌引导：服务端启用 SPARK_ACCESS_TOKEN 且本地无令牌时，弹出输入界面
+  const [needToken, setNeedToken] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+
+  // 注册「点击通知跳转到对应会话」的回调，并维护当前查看的会话
+  useEffect(() => {
+    setActivateHandler((convId: string) => setCurrentConversationId(convId));
+    return () => setActivateHandler(null);
+  }, []);
+
+  // 启动探测：服务端是否要求访问令牌；若需要且本地未存令牌，弹出输入界面
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuthConfig().then(({ tokenRequired }) => {
+      if (!cancelled && tokenRequired && !getToken()) setNeedToken(true);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    setActiveConversation(currentConversationId);
+  }, [currentConversationId]);
+
+  const enableNotifications = useCallback(async () => {
+    const p = await requestNotificationPermission();
+    setNotifPerm(p);
+  }, []);
+
+  const currentConversation: Conversation | undefined = useMemo(
+    () => conversations.find(c => c.id === currentConversationId),
+    [conversations, currentConversationId]
+  );
+
+  const isAgentConversation = !!currentConversation?.participantIds.some(id => getContact(id)?.isAgent);
+  const agentContact = agentContacts[0];
+  const agentName = agentContact?.name || '星火助手';
+  const currentAgentContact = currentConversation?.participantIds.map(getContact).find(c => c?.isAgent) || null;
+
+  const {
+    messages, sendText, sendVoice, sendImage, sendToAgent, retryMessage, typingMembers, isAgentThinking,
+    permissionRequest, handleStop, handlePermissionAllow, handlePermissionDeny, deleteMessage, loadMessages,
+    loadOlderMessages, hasMoreMessages, isLoadingOlder, remoteAssistActive,
+  } = useMessages(currentConversation || null, contacts, me.id, applyConversationUpdate);
+
+  // 路由发送：Agent 会话走流式，否则普通文本（群聊携带 @ 成员 / 引用回复）
+  const handleSendText = useCallback((text: string, mentions?: string[], quote?: QuoteRef) => {
+    if (isAgentConversation) sendToAgent(text);
+    else sendText(text, mentions, quote);
+  }, [isAgentConversation, sendToAgent, sendText]);
+
+  const handleSendAgentAssist = useCallback((text: string) => {
+    setRemoteAssist(false);
+    sendToAgent(text, { remoteAssist: true });
+  }, [sendToAgent]);
+
+  const handleSelectContact = useCallback(async (contactId: string) => {
+    const conv = await createConversation({ type: 'direct', participantIds: [contactId] });
+    setCurrentConversationId(conv.id);
+  }, [createConversation]);
+
+  const handleCreateGroup = useCallback(async (input: { type: 'group'; participantIds: string[]; title?: string; avatarText?: string; avatarColor?: string }) => {
+    const conv = await createConversation(input);
+    setCurrentConversationId(conv.id);
+  }, [createConversation]);
+
+  const handleSearchSelect = useCallback((conversationId: string) => {
+    setSearchOpen(false);
+    setCurrentConversationId(conversationId);
+  }, []);
+
+  const handleForward = useCallback((messageId: string) => {
+    const m = messages.find(x => x.id === messageId);
+    if (m) setForwardMsg(m);
+  }, [messages]);
+
+  const handlePickForward = useCallback(async (targetId: string) => {
+    if (!forwardMsg || !currentConversation) return;
+    const m = forwardMsg;
+    const payload: any = {
+      senderId: me.id,
+      meta: { forwardedFromName: currentConversation.title },
+    };
+    // 按原始消息类型转发，避免丢字段（图片丢 imagePath、agent/system 被服务端拒收）
+    switch (m.msgType) {
+      case 'voice':
+        payload.msgType = 'voice';
+        payload.audioPath = m.audioPath;
+        payload.duration = m.duration;
+        break;
+      case 'image':
+        if (m.imagePath) {
+          payload.msgType = 'image';
+          payload.imagePath = m.imagePath;
+          payload.content = m.content || ''; // 图片说明作为文本
+        } else {
+          payload.msgType = 'text';
+          payload.content = m.content || '[图片]';
+        }
+        break;
+      case 'agent':
+      case 'system':
+        // agent/system 为服务端内部类型，客户端转发时降级为文本摘要
+        payload.msgType = 'text';
+        payload.content = m.content || (m.msgType === 'agent' ? '[助手消息]' : '[系统消息]');
+        break;
+      default:
+        payload.msgType = 'text';
+        payload.content = m.content || '';
+    }
+    try {
+      await fetch(`/api/conversations/${targetId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      fetchConversations();
+    } catch {}
+    setForwardMsg(null);
+  }, [forwardMsg, currentConversation, me.id, fetchConversations]);
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden" style={{ backgroundColor: 'var(--td-bg-color-page)' }}>
+      <Sidebar
+        conversations={conversations}
+        contacts={contacts}
+        currentConversationId={currentConversationId}
+        onSelectConversation={setCurrentConversationId}
+        onSelectContact={handleSelectContact}
+        onCreateGroup={() => setGroupDialog(true)}
+        onDeleteConversation={deleteConversation}
+        onAddContact={addContact}
+        onDeleteContact={deleteContact}
+        onEditContact={(id, updates) => updateContact(id, updates)}
+        onOpenSettings={() => setSettings(true)}
+        onOpenSearch={() => setSearchOpen(true)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onEnableNotifications={enableNotifications}
+        notifState={notifPerm}
+      />
+
+      <main className="flex-1 flex flex-col min-w-0 h-full">
+        {currentConversation ? (
+          <ChatPage
+            conversation={currentConversation}
+            contacts={contacts}
+            meId={me.id}
+            messages={messages}
+            isAgentThinking={isAgentThinking}
+            permissionRequest={permissionRequest}
+            isAgentConversation={isAgentConversation}
+            agentName={agentName}
+            onSendText={handleSendText}
+            onSendVoice={sendVoice}
+            onSendImage={sendImage}
+            onSendAgentAssist={handleSendAgentAssist}
+            onStop={handleStop}
+            onPermissionAllow={handlePermissionAllow}
+            onPermissionDeny={handlePermissionDeny}
+            onOpenRemoteAssist={() => setRemoteAssist(true)}
+            onBack={() => setCurrentConversationId(null)}
+            onClearMessages={() => { if (currentConversation) clearMessages(currentConversation.id); }}
+            onDeleteMessage={deleteMessage}
+            onForward={handleForward}
+            onRetry={retryMessage}
+            typingMembers={typingMembers}
+            loadOlderMessages={loadOlderMessages}
+            hasMoreMessages={hasMoreMessages}
+            isLoadingOlder={isLoadingOlder}
+            onManageGroup={() => setGroupManage(true)}
+            onOpenAgentConfig={() => setAgentConfigOpen(true)}
+            remoteAssistActive={remoteAssistActive}
+          />
+        ) : (
+          <Welcome
+            onChatAgent={() => agentContact && handleSelectContact(agentContact.id)}
+            onCreateGroup={() => setGroupDialog(true)}
+          />
+        )}
+      </main>
+
+      <NewGroupDialog
+        visible={groupDialog}
+        contacts={contacts}
+        onClose={() => setGroupDialog(false)}
+        onCreate={handleCreateGroup}
+      />
+
+      {currentConversation && currentConversation.type === 'group' && (
+        <GroupManagePanel
+          visible={groupManage}
+          conversation={currentConversation}
+          contacts={contacts}
+          meId={me.id}
+          onClose={() => setGroupManage(false)}
+          onAddMember={addMember}
+          onRemoveMember={removeMember}
+          onRename={renameConversation}
+          onReloadMessages={loadMessages}
+        />
+      )}
+
+      <RemoteAssistPanel
+        visible={remoteAssist}
+        agentName={agentName}
+        onClose={() => setRemoteAssist(false)}
+        onSendLocalAssist={handleSendAgentAssist}
+      />
+
+      <SettingsPanel visible={settings} onClose={() => setSettings(false)} theme={theme} onToggleTheme={toggleTheme} notification={{ state: notifPerm, onEnable: enableNotifications }} />
+
+      <SearchModal
+        visible={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSearchSelect}
+      />
+
+      <ForwardDialog
+        visible={!!forwardMsg}
+        conversations={conversations}
+        currentConversationId={currentConversationId}
+        onClose={() => setForwardMsg(null)}
+        onPick={handlePickForward}
+      />
+
+      <AgentConfigDialog
+        visible={agentConfigOpen}
+        contact={currentAgentContact}
+        onClose={() => setAgentConfigOpen(false)}
+        onSave={async (cfg) => { if (currentAgentContact) await updateContact(currentAgentContact.id, { agentConfig: cfg }); }}
+      />
+
+      {needToken && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        >
+          <div
+            className="rounded-2xl p-6 w-80 max-w-[90vw] flex flex-col gap-3"
+            style={{ backgroundColor: 'var(--td-bg-color-container)' }}
+          >
+            <div className="text-lg font-semibold" style={{ color: 'var(--td-text-color-primary)' }}>需要访问令牌</div>
+            <div className="text-sm leading-relaxed" style={{ color: 'var(--td-text-color-secondary)' }}>
+              此服务已启用访问令牌鉴权。请输入部署时配置的访问令牌以继续使用（仅保存在本机浏览器）。
+            </div>
+            <input
+              type="password"
+              value={tokenInput}
+              autoFocus
+              onChange={(e) => setTokenInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && tokenInput.trim()) {
+                  setToken(tokenInput.trim());
+                  window.location.reload();
+                }
+              }}
+              placeholder="访问令牌"
+              className="px-3 py-2 rounded-lg outline-none"
+              style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-primary)', border: '1px solid var(--td-component-border)' }}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="text" onClick={() => setNeedToken(false)}>稍后</Button>
+              <Button
+                theme="primary"
+                disabled={!tokenInput.trim()}
+                onClick={() => { setToken(tokenInput.trim()); window.location.reload(); }}
+              >
+                确认
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Welcome({ onChatAgent, onCreateGroup }: { onChatAgent: () => void; onCreateGroup: () => void }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6" style={{ backgroundColor: 'var(--td-bg-color-page)' }}>
+      <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ backgroundColor: '#07c160' }}>
+        <span className="text-white text-3xl font-bold">星</span>
+      </div>
+      <div className="text-center">
+        <div className="text-2xl font-semibold" style={{ color: 'var(--td-text-color-primary)' }}>星火聊天</div>
+        <div className="text-sm mt-2 max-w-md" style={{ color: 'var(--td-text-color-secondary)' }}>
+          像微信一样聊天：单聊、群聊、发语音。还能召唤内置的「星火助手」(CodeBuddy Agent)，并发起远程协助让它帮你操作电脑。
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <Button icon={<Bot />} theme="primary" onClick={onChatAgent}>和星火助手聊聊</Button>
+        <Button icon={<Users />} variant="outline" onClick={onCreateGroup}>发起群聊</Button>
+      </div>
+      <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>
+        <MessageCircle /> 从左侧「通讯录」选择联系人即可开始对话
+      </div>
+    </div>
+  );
+}

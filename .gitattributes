@@ -1,0 +1,22 @@
+# 统一换行符为 LF，避免 Windows 检出 CRLF 在 Linux CI / Docker 构建中出问题
+* text=auto eol=lf
+
+# 明确按文本处理的关键文件
+*.ts text
+*.tsx text
+*.mjs text
+*.js text
+*.json text
+*.yml text
+*.yaml text
+*.md text
+Dockerfile text
+.gitignore text
+.env.example text
+
+# 二进制资源保持原样
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
