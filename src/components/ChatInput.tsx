@@ -176,14 +176,14 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
           </div>
         )}
         <div
-          className="rounded-2xl px-3 py-2 flex items-end gap-2"
+          className="rounded-2xl px-3 py-2 flex items-center gap-2"
           style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
         >
           {/* 表情 / 图片 */}
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setShowEmoji(v => !v)}
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
               style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
               title="表情"
             >
@@ -204,7 +204,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
           </div>
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
             style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
             title="发送图片"
           >
@@ -219,7 +219,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             onPointerUp={handlePressEnd}
             onPointerLeave={handlePressEnd}
             onClick={e => e.preventDefault()}
-            className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors select-none touch-none"
+            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors select-none touch-none"
             style={{
               backgroundColor: recording ? (cancelMode ? '#e34d59' : '#07c160') : 'var(--td-bg-color-component-hover)',
               color: recording ? '#fff' : 'var(--td-text-color-secondary)',
@@ -281,14 +281,14 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
           {recording ? (
             <button
               onClick={cancelRecording}
-              className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors"
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
               style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
               title="取消录音"
             >
               <X size={18} />
             </button>
           ) : isAgentThinking ? (
-            <Button size="small" icon={<Square size={14} />} onClick={onStop} theme="warning" variant="outline">
+            <Button size="small" icon={<Square size={14} />} onClick={onStop} theme="warning" variant="outline" style={{ height: 40 }}>
               停止
             </Button>
           ) : (
@@ -297,7 +297,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
               icon={<Send size={14} />}
               onClick={handleSend}
               disabled={!text.trim()}
-              style={{ backgroundColor: '#07c160', borderColor: '#07c160', color: '#fff' }}
+              style={{ height: 40, backgroundColor: '#07c160', borderColor: '#07c160', color: '#fff' }}
             >
               发送
             </Button>

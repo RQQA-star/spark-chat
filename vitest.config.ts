@@ -53,8 +53,10 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}', 'server/**/*.test.ts'],
     setupFiles: ['./server/test-setup.ts', './src/test/setup.ts'],
     // 不预打包第三方组件库，避免 optimizeDeps 扫描其重型 web-components 链
-    deps: {
-      inline: ['@tdesign-react/chat'],
+    server: {
+      deps: {
+        inline: ['@tdesign-react/chat'],
+      },
     },
   },
 });

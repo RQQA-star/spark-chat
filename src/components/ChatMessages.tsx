@@ -1,4 +1,4 @@
-import { useEffect, useRef, Fragment } from 'react';
+import { useEffect, useRef, useState, Fragment } from 'react';
 import { Loading } from 'tdesign-react';
 import { ChatMarkdown } from '@tdesign-react/chat';
 import { Bot, User, Trash2, Forward, Reply, RefreshCw } from 'lucide-react';
@@ -62,6 +62,27 @@ function renderText(content: string, msg: ConvMessage, contacts: Contact[]): Rea
   return parts;
 }
 
+// 图片气泡：加载失败时回退为占位块，避免「裂图」破坏对称布局
+function ImageBubble({ imagePath }: { imagePath: string }) {
+  const [err, setErr] = useState(false);
+  if (err) {
+    return (
+      <div className="flex items-center justify-center w-[200px] h-[150px] rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+        <span className="text-xs">图片加载失败</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`/api/image/${imagePath}`}
+      alt="图片"
+      onError={() => setErr(true)}
+      className="max-w-[240px] max-h-[280px] rounded-lg object-contain cursor-pointer"
+      onClick={() => window.open(`/api/image/${imagePath}`, '_blank')}
+    />
+  );
+}
+
 export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, scrollRef,
 }: ChatMessagesProps) {
@@ -117,7 +138,7 @@ export function ChatMessages({
         return (
           <Fragment key={msg.id}>
             {divider}
-            <div id={`msg-${msg.id}`} className={`group flex gap-2.5 ${isMe ? 'flex-row-reverse' : ''}`}>
+            <div id={`msg-${msg.id}`} className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
               {/* 头像 */}
               <div
                 className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white"
@@ -126,7 +147,7 @@ export function ChatMessages({
                 {isMe ? <User size={16} /> : (contact?.isAgent ? <Bot size={16} /> : avatarText)}
               </div>
 
-              <div className={`flex flex-col gap-1 max-w-[78%] ${isMe ? 'items-end' : 'items-start'}`}>
+              <div className={`flex flex-col gap-1 max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
                 {isGroup && !isMe && (
                   <span className="text-xs px-1" style={{ color: 'var(--td-text-color-placeholder)' }}>{name}</span>
                 )}
@@ -169,12 +190,7 @@ export function ChatMessages({
                 {/* 图片 */}
                 {msg.msgType === 'image' && msg.imagePath && (
                   <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }}>
-                    <img
-                      src={`/api/image/${msg.imagePath}`}
-                      alt="图片"
-                      className="max-w-[220px] max-h-[260px] rounded-lg object-cover cursor-pointer"
-                      onClick={() => window.open(`/api/image/${msg.imagePath}`, '_blank')}
-                    />
+                    <ImageBubble imagePath={msg.imagePath} />
                   </div>
                 )}
 
