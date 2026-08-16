@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import QRCode from "qrcode";
 import * as db from "./db.js";
 import * as nativeAssistant from "./nativeAssistant.js";
 import { buildRemoteAssistMcpServer } from "./remoteAssistTools.js";
@@ -282,6 +283,22 @@ app.get("/api/conversations", (req, res) => {
     res.json({ conversations });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || '获取会话失败' });
+  }
+});
+
+// ============= 群二维码（邀请入群） =============
+// 返回含群 ID 的二维码：扫码内容形如 sparkchat://group/join?groupId=<id>
+// 前端可在群管理面板展示 / 下载 PNG。纯本地邀请（无外部注册），扫码后由客户端提示"复制群号"。
+app.get("/api/conversations/:id/qr", async (req, res) => {
+  try {
+    const conv = db.getConversation(req.params.id);
+    if (!conv) return res.status(404).json({ error: '会话不存在' });
+    if (conv.type !== 'group') return res.status(400).json({ error: '只有群聊可生成邀请二维码' });
+    const payload = `sparkchat://group/join?groupId=${encodeURIComponent(conv.id)}`;
+    const png = await QRCode.toDataURL(payload, { margin: 2, width: 320 });
+    res.json({ groupId: conv.id, payload, qrDataUrl: png, title: conv.title });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '生成二维码失败' });
   }
 });
 
@@ -635,6 +652,112 @@ app.get("/api/export", (req, res) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || '导出失败' });
+  }
+});
+
+// ============= 朋友圈（Moments） =============
+// 朋友圈图片上传（写入 data/moments，返回文件名）
+app.post("/api/moments/image/upload", (req, res) => {
+  try {
+    const { image, ext = 'png' } = req.body;
+    if (!image || typeof image !== 'string') return res.status(400).json({ error: '缺少 image(base64)' });
+    const cleanExt = String(ext).replace(/[^a-z0-9]/gi, '').toLowerCase() || 'png';
+    const buffer = Buffer.from(image, 'base64');
+    if (buffer.length > 8 * 1024 * 1024) return res.status(413).json({ error: '图片过大（上限 8MB）' });
+    const filename = `${uuidv4()}.${cleanExt}`;
+    fs.writeFileSync(path.join(db.MOMENTS_IMAGE_UPLOADS_DIR, filename), buffer);
+    res.json({ imagePath: filename });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '朋友圈图片上传失败' });
+  }
+});
+
+app.get("/api/moments/image/:file", (req, res) => {
+  try {
+    const file = req.params.file;
+    if (file.includes('..') || file.includes('/') || file.includes('\\')) return res.status(400).send('bad');
+    const filepath = path.join(db.MOMENTS_IMAGE_UPLOADS_DIR, file);
+    if (!fs.existsSync(filepath)) return res.status(404).send('not found');
+    const ext = file.split('.').pop() || 'png';
+    res.setHeader('Content-Type', IMAGE_EXT_CONTENT[ext] || 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    fs.createReadStream(filepath).pipe(res);
+  } catch (error: any) {
+    if (!res.headersSent) res.status(500).send('server error');
+  }
+});
+
+// 拉取时间线（me + 联系人动态），支持分页游标
+app.get("/api/moments", (req, res) => {
+  try {
+    const beforeCreated = req.query.beforeCreated as string | undefined;
+    const beforeId = req.query.beforeId as string | undefined;
+    const before = beforeCreated && beforeId ? { createdAt: beforeCreated, id: beforeId } : null;
+    const result = db.getMoments(before, 30);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '获取朋友圈失败' });
+  }
+});
+
+// 发布动态（仅 me 可发）
+app.post("/api/moments", (req, res) => {
+  try {
+    const { content, images } = req.body;
+    if ((!content || !String(content).trim()) && (!Array.isArray(images) || images.length === 0)) {
+      return res.status(400).json({ error: '动态不能为空（文字或图片至少一项）' });
+    }
+    const moment = db.createMoment({
+      authorId: db.ME_ID,
+      content: content ? String(content).slice(0, 2000) : null,
+      images: Array.isArray(images) ? images.filter((x: unknown) => typeof x === 'string').slice(0, 9) : [],
+    });
+    res.json({ moment });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '发布动态失败' });
+  }
+});
+
+// 删除自己的动态
+app.delete("/api/moments/:id", (req, res) => {
+  try {
+    const m = db.getMoment(req.params.id);
+    if (!m) return res.status(404).json({ error: '动态不存在' });
+    if (m.authorId !== db.ME_ID) return res.status(403).json({ error: '只能删除自己的动态' });
+    const ok = db.deleteMoment(req.params.id);
+    res.json({ success: ok });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '删除动态失败' });
+  }
+});
+
+// 点赞 / 取消点赞
+app.post("/api/moments/:id/like", (req, res) => {
+  try {
+    const m = db.getMoment(req.params.id);
+    if (!m) return res.status(404).json({ error: '动态不存在' });
+    const result = db.toggleMomentLike(req.params.id, db.ME_ID);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '操作失败' });
+  }
+});
+
+// 评论 / 回复评论
+app.post("/api/moments/:id/comment", (req, res) => {
+  try {
+    const { content, replyTo } = req.body;
+    if (!content || !String(content).trim()) return res.status(400).json({ error: '评论不能为空' });
+    const comment = db.addMomentComment({
+      momentId: req.params.id,
+      authorId: db.ME_ID,
+      replyTo: replyTo || null,
+      content: String(content).slice(0, 500),
+    });
+    if (!comment) return res.status(404).json({ error: '动态不存在' });
+    res.json({ comment });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '评论失败' });
   }
 });
 

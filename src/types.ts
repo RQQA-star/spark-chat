@@ -147,3 +147,33 @@ export interface Favorite {
 }
 
 export type Theme = 'light' | 'dark';
+
+// ============= 朋友圈（Moments） =============
+export interface MomentComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  replyTo: string | null;   // 被回复者的 userId
+  content: string;
+  createdAt: string;
+}
+
+export interface MomentLike {
+  userId: string;
+  name: string;
+}
+
+export interface Moment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarText: string | null;
+  authorAvatarColor: string | null;
+  authorIsAgent: boolean;
+  content: string | null;
+  images: string[];
+  createdAt: string;
+  likes: MomentLike[];
+  likedByMe: boolean;
+  comments: MomentComment[];
+}

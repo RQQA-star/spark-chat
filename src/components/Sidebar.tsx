@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tooltip, Input, Dialog } from 'tdesign-react';
-import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin, Star, CheckCheck } from 'lucide-react';
+import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin, Star, CheckCheck, Camera } from 'lucide-react';
 import { Contact, Conversation } from '../types';
 import { NotifState } from '../lib/notifications';
 import { AddContactDialog } from './AddContactDialog';
@@ -29,6 +29,8 @@ interface SidebarProps {
   onOpenContactCard?: (id: string) => void;
   onMarkAllRead?: () => void;
   onOpenFavorites?: () => void;
+  onOpenMoments?: () => void;
+  activeView?: 'chat' | 'moments';
 }
 
 function Avatar({ text, color, size = 40 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -77,7 +79,7 @@ export function Sidebar({
   conversations, contacts, currentConversationId, onSelectConversation,
   onSelectContact, onCreateGroup, onDeleteConversation, onAddContact, onDeleteContact, onEditContact, onOpenSettings, onOpenSearch, theme, onToggleTheme,
   onEnableNotifications, notifState = 'default', onTogglePin, onToggleMute,
-  onToggleStar, onOpenContactCard, onMarkAllRead, onOpenFavorites,
+  onToggleStar, onOpenContactCard, onMarkAllRead, onOpenFavorites, onOpenMoments, activeView,
 }: SidebarProps) {
   const [tab, setTab] = useState<'chat' | 'contacts'>('chat');
   const [search, setSearch] = useState('');
@@ -112,8 +114,9 @@ export function Sidebar({
       >
         <Avatar text={meContact?.avatarText || '我'} color={meContact?.avatarColor || '#07c160'} size={40} />
         <div className="flex-1 flex flex-col items-center gap-1 mt-4">
-          <RailNav icon={<MessageCircle size={20} />} label="聊天" active={tab === 'chat'} onClick={() => setTab('chat')} />
-          <RailNav icon={<Users size={20} />} label="通讯录" active={tab === 'contacts'} onClick={() => setTab('contacts')} />
+          <RailNav icon={<MessageCircle size={20} />} label="聊天" active={(activeView === 'chat' || !activeView) && tab === 'chat'} onClick={() => setTab('chat')} />
+          <RailNav icon={<Users size={20} />} label="通讯录" active={(activeView === 'chat' || !activeView) && tab === 'contacts'} onClick={() => setTab('contacts')} />
+          <RailNav icon={<Camera size={20} />} label="朋友圈" active={activeView === 'moments'} onClick={() => onOpenMoments?.()} />
         </div>
         <div className="flex flex-col items-center gap-1 mb-1">
           <RailIcon title="搜索聊天记录" onClick={onOpenSearch}><Search size={18} /></RailIcon>

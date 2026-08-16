@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Button, Tooltip, Loading } from 'tdesign-react';
-import { Monitor, ArrowLeft, Trash2, MessageCircle, Users, Bot, Megaphone } from 'lucide-react';
+import { Monitor, ArrowLeft, Trash2, MessageCircle, Users, Bot, Megaphone, Video } from 'lucide-react';
 import { Conversation, Contact, ConvMessage, PermissionRequest } from '../types';
 import { ChatMessages } from '../components/ChatMessages';
 import { ChatInput } from '../components/ChatInput';
@@ -51,6 +51,8 @@ interface ChatPageProps {
   onManageGroup: () => void;
   /** 本机远程协助进行中（来自 useMessages 的实时流状态） */
   remoteAssistActive?: boolean;
+  /** 发起视频通话（本地模拟） */
+  onStartVideoCall?: () => void;
 }
 
 function Avatar({ text, color, size = 28 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -68,7 +70,7 @@ export function ChatPage({
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
   onPreviewImage, onPreviewContact, onFavorite,
   onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
-  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive,
+  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall,
 }: ChatPageProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -201,6 +203,13 @@ export function ChatPage({
               <Tooltip content="管理群成员与群名称">
                 <Button icon={<Users />} onClick={onManageGroup} variant="text">
                   群管理
+                </Button>
+              </Tooltip>
+            )}
+            {onStartVideoCall && (
+              <Tooltip content={conversation.type === 'group' ? '发起群视频（演示）' : '视频通话（演示）'}>
+                <Button icon={<Video />} onClick={onStartVideoCall} variant="text">
+                  视频
                 </Button>
               </Tooltip>
             )}

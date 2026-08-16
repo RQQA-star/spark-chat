@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, Input, Button } from 'tdesign-react';
-import { UserPlus, UserMinus, Check } from 'lucide-react';
+import { UserPlus, UserMinus, Check, QrCode, Download } from 'lucide-react';
 import { Conversation, Contact } from '../types';
 
 interface GroupManagePanelProps {
@@ -34,6 +34,9 @@ export function GroupManagePanel({
   const [title, setTitle] = useState(conversation.title || '');
   const [announcement, setAnnouncement] = useState(conversation.announcement || '');
   const [busy, setBusy] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrData, setQrData] = useState<{ qrDataUrl: string; payload: string; title: string } | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   useEffect(() => {
     if (visible) { setTitle(conversation.title || ''); setAnnouncement(conversation.announcement || ''); }
@@ -117,7 +120,23 @@ export function GroupManagePanel({
     }
   };
 
+  const openQr = async () => {
+    setQrOpen(true);
+    setQrLoading(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/qr`);
+      if (!res.ok) throw new Error('获取二维码失败');
+      const data = await res.json();
+      setQrData({ qrDataUrl: data.qrDataUrl, payload: data.payload, title: data.title || conversation.title || '群聊' });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
   return (
+    <>
     <Dialog
       visible={visible}
       onClose={onClose}
@@ -126,7 +145,7 @@ export function GroupManagePanel({
       width={440}
     >
       <div className="space-y-5">
-        {/* 群名称 */}
+        {/* 群名称 + 群二维码 */}
         <div>
           <div className="text-sm mb-2" style={{ color: 'var(--td-text-color-secondary)' }}>群名称</div>
           <div className="flex gap-2">
@@ -144,6 +163,15 @@ export function GroupManagePanel({
               保存
             </Button>
           </div>
+          <Button
+            className="mt-2"
+            size="small"
+            variant="outline"
+            icon={<QrCode size={15} />}
+            onClick={openQr}
+          >
+            群二维码（邀请）
+          </Button>
         </div>
 
         {/* 群公告 */}
@@ -239,5 +267,43 @@ export function GroupManagePanel({
         </div>
       </div>
     </Dialog>
+
+    {/* 群二维码弹窗 */}
+    <Dialog
+      visible={qrOpen}
+      onClose={() => setQrOpen(false)}
+      header="群二维码"
+      footer={null}
+      width={320}
+    >
+      <div className="flex flex-col items-center gap-3 py-2">
+        <div className="text-sm" style={{ color: 'var(--td-text-color-secondary)' }}>{qrData?.title || conversation.title}</div>
+        {qrLoading ? (
+          <div className="w-[240px] h-[240px] flex items-center justify-center" style={{ color: 'var(--td-text-color-placeholder)' }}>生成中…</div>
+        ) : qrData ? (
+          <img src={qrData.qrDataUrl} alt="群二维码" className="w-[240px] h-[240px]" />
+        ) : (
+          <div className="w-[240px] h-[240px] flex items-center justify-center" style={{ color: 'var(--td-text-color-placeholder)' }}>生成失败</div>
+        )}
+        <div className="text-xs text-center" style={{ color: 'var(--td-text-color-placeholder)' }}>
+          扫码可复制本群邀请信息（本地演示）
+        </div>
+        {qrData && (
+          <Button
+            size="small"
+            icon={<Download size={15} />}
+            onClick={() => {
+              const a = document.createElement('a');
+              a.href = qrData.qrDataUrl;
+              a.download = `群二维码_${qrData.title || 'group'}.png`;
+              a.click();
+            }}
+          >
+            下载二维码
+          </Button>
+        )}
+      </div>
+    </Dialog>
+    </>
   );
 }

@@ -42,6 +42,12 @@ if (!fs.existsSync(VIDEO_UPLOADS_DIR)) {
   fs.mkdirSync(VIDEO_UPLOADS_DIR, { recursive: true });
 }
 
+// 朋友圈图片目录
+export const MOMENTS_IMAGE_UPLOADS_DIR = path.join(dataDir, 'moments');
+if (!fs.existsSync(MOMENTS_IMAGE_UPLOADS_DIR)) {
+  fs.mkdirSync(MOMENTS_IMAGE_UPLOADS_DIR, { recursive: true });
+}
+
 // 创建数据库连接（显式标注类型，便于 composite 项目生成可命名的声明）
 const db: Database.Database = new Database(dbPath);
 
@@ -227,6 +233,18 @@ function seedIfEmpty() {
     INSERT INTO messages (id, conversation_id, sender_id, msg_type, content, audio_path, duration, tool_calls, agent_session_id, created_at)
     VALUES (?, ?, 'agent_xinghuo', 'system', '欢迎使用星火聊天 👋 你可以和朋友聊天、发语音，也可以直接和我（星火助手）对话，或发起「远程协助」让我帮你操作本机。', NULL, NULL, NULL, NULL, ?)
   `).run(uuidv4(), welcomeId, now);
+
+  // 朋友圈示例动态（演示用，仅首次种子）
+  const samples: { author: string; content: string }[] = [
+    { author: 'u_alice', content: '周末去爬山，山顶的云海太美了 ☁️⛰️' },
+    { author: 'u_bob', content: '新做的拿铁，拉花终于像样了 ☕' },
+    { author: 'u_carol', content: '推荐一本最近在读的书《人类简史》，视角很新颖。' },
+    { author: ME_ID, content: '星火聊天又更新啦，现在能发朋友圈了 🎉' },
+  ];
+  for (const s of samples) {
+    db.prepare('INSERT INTO moments (id, author_id, content, images, created_at) VALUES (?, ?, ?, NULL, ?)')
+      .run(uuidv4(), s.author, s.content, new Date(Date.now() - Math.floor(Math.random() * 86400000 * 3)).toISOString());
+  }
 }
 
 // 迁移：为 messages 增加 read 列（旧库兼容）
@@ -283,6 +301,41 @@ db.exec(`
     file_path TEXT,
     created_at TEXT NOT NULL
   );
+`);
+
+// ============= 朋友圈（Moments） =============
+// 动态表：作者 + 文本内容 + 多张图片（JSON 文件名数组）+ 创建时间
+// 必须在 seedIfEmpty() 之前建表（种子会写入示例动态）。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS moments (
+    id TEXT PRIMARY KEY,
+    author_id TEXT NOT NULL,         -- 'me' 或 contact.id
+    content TEXT,
+    images TEXT,                     -- JSON 数组：MOMENTS_IMAGE_UPLOADS_DIR 下的文件名
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_moments_created_at ON moments(created_at DESC);
+
+  -- 点赞表（author_id + moment_id 唯一，取消点赞即删除该行）
+  CREATE TABLE IF NOT EXISTS moment_likes (
+    moment_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (moment_id, user_id),
+    FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+  );
+
+  -- 评论表
+  CREATE TABLE IF NOT EXISTS moment_comments (
+    id TEXT PRIMARY KEY,
+    moment_id TEXT NOT NULL,
+    author_id TEXT NOT NULL,         -- 'me' 或 contact.id
+    reply_to TEXT,                   -- 被回复者的 user_id（可选）
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_moment_comments_moment_id ON moment_comments(moment_id);
 `);
 
 seedIfEmpty();
@@ -925,6 +978,172 @@ export function removeParticipant(conversationId: string, contactId: string): bo
   const changes = db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ? AND contact_id = ?').run(conversationId, contactId).changes;
   if (changes > 0) db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), conversationId);
   return changes > 0;
+}
+
+// ============= 朋友圈（Moments）操作 =============
+export interface DbMoment {
+  id: string;
+  author_id: string;
+  content: string | null;
+  images: string | null;        // JSON 数组
+  created_at: string;
+}
+
+export interface DbMomentComment {
+  id: string;
+  moment_id: string;
+  author_id: string;
+  reply_to: string | null;
+  content: string;
+  created_at: string;
+}
+
+// 序列化一条动态（聚合作者信息、点赞者、评论列表），供前端直接渲染时间线
+export interface MomentLike {
+  userId: string;
+  name: string;
+}
+
+export interface SerializedMoment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarText: string | null;
+  authorAvatarColor: string | null;
+  authorIsAgent: boolean;
+  content: string | null;
+  images: string[];
+  createdAt: string;
+  likes: MomentLike[];
+  likedByMe: boolean;
+  comments: {
+    id: string;
+    authorId: string;
+    authorName: string;
+    replyTo: string | null;
+    content: string;
+    createdAt: string;
+  }[];
+}
+
+function contactName(id: string): string {
+  if (id === ME_ID) return '我';
+  const c = getContact(id);
+  return c?.name || id;
+}
+
+function serializeMoment(m: DbMoment): SerializedMoment {
+  const author = getContact(m.author_id);
+  const likeRows = db.prepare('SELECT user_id FROM moment_likes WHERE moment_id = ?').all(m.id) as { user_id: string }[];
+  const likes: MomentLike[] = likeRows.map(l => ({ userId: l.user_id, name: contactName(l.user_id) }));
+  const comments = db.prepare('SELECT * FROM moment_comments WHERE moment_id = ? ORDER BY created_at ASC').all(m.id) as DbMomentComment[];
+  return {
+    id: m.id,
+    authorId: m.author_id,
+    authorName: author?.name || contactName(m.author_id),
+    authorAvatarText: author?.avatar_text || null,
+    authorAvatarColor: author?.avatar_color || null,
+    authorIsAgent: !!author?.is_agent,
+    content: m.content,
+    images: m.images ? JSON.parse(m.images) : [],
+    createdAt: m.created_at,
+    likes,
+    likedByMe: likes.some(l => l.userId === ME_ID),
+    comments: comments.map(c => ({
+      id: c.id,
+      authorId: c.author_id,
+      authorName: contactName(c.author_id),
+      replyTo: c.reply_to,
+      content: c.content,
+      createdAt: c.created_at,
+    })),
+  };
+}
+
+// 拉取时间线：me 与所有联系人的动态（按时间倒序）
+export function getMoments(before?: { createdAt: string; id: string } | null, limit = 30): { moments: SerializedMoment[]; hasMore: boolean } {
+  let rows: DbMoment[];
+  if (before) {
+    rows = db.prepare(`
+      SELECT * FROM moments
+      WHERE (created_at < @bc OR (created_at = @bc AND id < @bid))
+      ORDER BY created_at DESC, id DESC LIMIT @lim
+    `).all({ bc: before.createdAt, bid: before.id, lim: limit }) as DbMoment[];
+  } else {
+    rows = db.prepare(`SELECT * FROM moments ORDER BY created_at DESC, id DESC LIMIT @lim`).all({ lim: limit }) as DbMoment[];
+  }
+  const hasMore = (() => {
+    if (rows.length < limit) return false;
+    const oldest = rows[rows.length - 1];
+    const rem = db.prepare(`
+      SELECT COUNT(*) as c FROM moments
+      WHERE (created_at < @bc OR (created_at = @bc AND id < @bid))
+    `).get({ bc: oldest.created_at, bid: oldest.id }) as { c: number };
+    return rem.c > 0;
+  })();
+  // 最新在前（时间线顶部最新）
+  return { moments: rows.map(serializeMoment), hasMore };
+}
+
+export function getMoment(id: string): SerializedMoment | undefined {
+  const m = db.prepare('SELECT * FROM moments WHERE id = ?').get(id) as DbMoment | undefined;
+  return m ? serializeMoment(m) : undefined;
+}
+
+export function createMoment(input: { authorId: string; content?: string | null; images?: string[] }): SerializedMoment {
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO moments (id, author_id, content, images, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(id, input.authorId, input.content ?? null, input.images && input.images.length ? JSON.stringify(input.images) : null, now);
+  return serializeMoment(getMomentRow(id)!);
+}
+
+function getMomentRow(id: string): DbMoment | undefined {
+  return db.prepare('SELECT * FROM moments WHERE id = ?').get(id) as DbMoment | undefined;
+}
+
+export function deleteMoment(id: string): boolean {
+  const m = getMomentRow(id);
+  const ok = db.prepare('DELETE FROM moments WHERE id = ?').run(id).changes > 0;
+  if (ok && m?.images) {
+    const imgs = JSON.parse(m.images) as string[];
+    for (const f of imgs) {
+      const abs = path.resolve(MOMENTS_IMAGE_UPLOADS_DIR, f);
+      if (abs.startsWith(MOMENTS_IMAGE_UPLOADS_DIR + path.sep) && fs.existsSync(abs)) {
+        void fs.promises.unlink(abs).catch(() => {});
+      }
+    }
+  }
+  return ok;
+}
+
+export function toggleMomentLike(momentId: string, userId: string): { likes: MomentLike[]; likedByMe: boolean } {
+  const existing = db.prepare('SELECT 1 FROM moment_likes WHERE moment_id = ? AND user_id = ?').get(momentId, userId);
+  if (existing) {
+    db.prepare('DELETE FROM moment_likes WHERE moment_id = ? AND user_id = ?').run(momentId, userId);
+  } else {
+    db.prepare('INSERT INTO moment_likes (moment_id, user_id, created_at) VALUES (?, ?, ?)').run(momentId, userId, new Date().toISOString());
+  }
+  const likes = db.prepare('SELECT user_id FROM moment_likes WHERE moment_id = ?').all(momentId) as { user_id: string }[];
+  const likeList: MomentLike[] = likes.map(l => ({ userId: l.user_id, name: contactName(l.user_id) }));
+  return { likes: likeList, likedByMe: likeList.some(l => l.userId === ME_ID) };
+}
+
+export function addMomentComment(input: { momentId: string; authorId: string; replyTo?: string | null; content: string }): SerializedMoment['comments'][number] | null {
+  const moment = getMomentRow(input.momentId);
+  if (!moment) return null;
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  db.prepare('INSERT INTO moment_comments (id, moment_id, author_id, reply_to, content, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, input.momentId, input.authorId, input.replyTo ?? null, input.content, now);
+  return {
+    id,
+    authorId: input.authorId,
+    authorName: contactName(input.authorId),
+    replyTo: input.replyTo ?? null,
+    content: input.content,
+    createdAt: now,
+  };
 }
 
 // 优雅关闭：释放 SQLite 连接（进程退出 / 容器停止时调用）。

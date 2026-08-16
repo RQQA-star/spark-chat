@@ -11,6 +11,7 @@ import { useSettings } from './hooks/useSettings';
 
 import { Sidebar } from './components/Sidebar';
 import { ChatPage } from './pages/ChatPage';
+import { MomentsPage } from './pages/MomentsPage';
 import { NewGroupDialog } from './components/NewGroupDialog';
 import { GroupManagePanel } from './components/GroupManagePanel';
 import { RemoteAssistPanel } from './components/RemoteAssistPanel';
@@ -21,6 +22,7 @@ import { AgentConfigDialog } from './components/AgentConfigDialog';
 import { Lightbox } from './components/Lightbox';
 import { ContactCardDialog } from './components/ContactCardDialog';
 import { FavoritesPanel } from './components/FavoritesPanel';
+import { VideoCallDialog } from './components/VideoCallDialog';
 import { Conversation, ConvMessage, Contact, QuoteRef } from './types';
 import { getNotificationState, requestNotificationPermission, setActivateHandler, setActiveConversation, NotifState } from './lib/notifications';
 import { getToken, setToken, fetchAuthConfig } from './lib/auth';
@@ -33,6 +35,8 @@ export default function App() {
   const { fontScale, setFontScale, chatBg, setChatBg } = useSettings();
 
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  // 主视图切换：聊天 / 朋友圈
+  const [view, setView] = useState<'chat' | 'moments'>('chat');
   const [groupDialog, setGroupDialog] = useState(false);
   const [groupManage, setGroupManage] = useState(false);
   const [remoteAssist, setRemoteAssist] = useState(false);
@@ -49,6 +53,8 @@ export default function App() {
   // 访问令牌引导：服务端启用 SPARK_ACCESS_TOKEN 且本地无令牌时，弹出输入界面
   const [needToken, setNeedToken] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
+  // 视频通话（本地模拟）弹窗
+  const [videoCall, setVideoCall] = useState<{ name: string; text?: string | null; color?: string | null; isGroup?: boolean } | null>(null);
 
   // 注册「点击通知跳转到对应会话」的回调，并维护当前查看的会话
   useEffect(() => {
@@ -83,6 +89,22 @@ export default function App() {
   const agentName = agentContact?.name || '星火助手';
   const currentAgentContact = currentConversation?.participantIds.map(getContact).find(c => c?.isAgent) || null;
 
+  // 发起视频通话（本地模拟）：根据当前会话推导出对端信息
+  const handleStartVideoCall = useCallback(() => {
+    if (!currentConversation) return;
+    if (currentConversation.type === 'group') {
+      setVideoCall({ name: currentConversation.title || '群聊', text: currentConversation.avatarText, color: currentConversation.avatarColor, isGroup: true });
+    } else {
+      const peer = getContact(currentConversation.participantIds.find(id => id !== me.id) || '');
+      setVideoCall({
+        name: peer?.name || '对方',
+        text: peer?.avatarText ?? null,
+        color: peer?.avatarColor ?? null,
+        isGroup: false,
+      });
+    }
+  }, [currentConversation, getContact, me.id]);
+
   const {
     messages, sendText, sendVoice, sendImage, sendToAgent, retryMessage, typingMembers, isAgentThinking,
     permissionRequest, handleStop, handlePermissionAllow, handlePermissionDeny, deleteMessage, loadMessages,
@@ -102,20 +124,26 @@ export default function App() {
     sendToAgent(text, { remoteAssist: true });
   }, [sendToAgent]);
 
+  // 打开某个会话（同时切回聊天视图）
+  const openConversation = useCallback((id: string) => {
+    setView('chat');
+    setCurrentConversationId(id);
+  }, []);
+
   const handleSelectContact = useCallback(async (contactId: string) => {
     const conv = await createConversation({ type: 'direct', participantIds: [contactId] });
-    setCurrentConversationId(conv.id);
-  }, [createConversation]);
+    openConversation(conv.id);
+  }, [createConversation, openConversation]);
 
   const handleCreateGroup = useCallback(async (input: { type: 'group'; participantIds: string[]; title?: string; avatarText?: string; avatarColor?: string }) => {
     const conv = await createConversation(input);
-    setCurrentConversationId(conv.id);
-  }, [createConversation]);
+    openConversation(conv.id);
+  }, [createConversation, openConversation]);
 
   const handleSearchSelect = useCallback((conversationId: string) => {
     setSearchOpen(false);
-    setCurrentConversationId(conversationId);
-  }, []);
+    openConversation(conversationId);
+  }, [openConversation]);
 
   const previewOf = (m: ConvMessage): string => {
     if (m.recalled) return '撤回了一条消息';
@@ -232,7 +260,7 @@ export default function App() {
         conversations={conversations}
         contacts={contacts}
         currentConversationId={currentConversationId}
-        onSelectConversation={setCurrentConversationId}
+        onSelectConversation={openConversation}
         onSelectContact={handleSelectContact}
         onCreateGroup={() => setGroupDialog(true)}
         onDeleteConversation={deleteConversation}
@@ -251,10 +279,14 @@ export default function App() {
         onOpenContactCard={handlePreviewContact}
         onMarkAllRead={markAllRead}
         onOpenFavorites={openFavorites}
+        onOpenMoments={() => setView('moments')}
+        activeView={view}
       />
 
       <main className="flex-1 flex flex-col min-w-0 h-full">
-        {currentConversation ? (
+        {view === 'moments' ? (
+          <MomentsPage meId={me.id} onBack={() => setView('chat')} />
+        ) : currentConversation ? (
           <ChatPage
             conversation={currentConversation}
             contacts={contacts}
@@ -299,6 +331,7 @@ export default function App() {
             onManageGroup={() => setGroupManage(true)}
             onOpenAgentConfig={() => setAgentConfigOpen(true)}
             remoteAssistActive={remoteAssistActive}
+            onStartVideoCall={handleStartVideoCall}
           />
         ) : (
           <Welcome
@@ -379,6 +412,15 @@ export default function App() {
         onClose={() => setFavoritesOpen(false)}
         onRemove={removeFavorite}
         onOpenConversation={(cid) => { setCurrentConversationId(cid); }}
+      />
+
+      <VideoCallDialog
+        visible={!!videoCall}
+        peerName={videoCall?.name || ''}
+        peerAvatarText={videoCall?.text ?? null}
+        peerAvatarColor={videoCall?.color ?? null}
+        isGroup={videoCall?.isGroup}
+        onClose={() => setVideoCall(null)}
       />
 
       {needToken && (

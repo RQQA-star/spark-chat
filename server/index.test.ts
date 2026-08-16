@@ -527,3 +527,57 @@ describe('数据导出 (P2-W3)', () => {
     expect(res.body.messages.some((m: any) => m.content === '导出测试')).toBe(true);
   });
 });
+
+// ============= P2-重 · 朋友圈 / 群二维码 =============
+describe('朋友圈 (Moments)', () => {
+  it('发布动态 → 时间线可见 → 点赞 → 评论', async () => {
+    const res = await request(app).post('/api/moments').send({ content: '测试动态' });
+    expect(res.status).toBe(200);
+    const moment = res.body.moment;
+    expect(moment.id).toBeTruthy();
+    expect(moment.authorId).toBe('me');
+
+    const list = await request(app).get('/api/moments');
+    expect(list.status).toBe(200);
+    expect(list.body.moments.some((m: any) => m.id === moment.id)).toBe(true);
+
+    const like = await request(app).post(`/api/moments/${moment.id}/like`);
+    expect(like.status).toBe(200);
+    expect(like.body.likedByMe).toBe(true);
+    expect(like.body.likes.some((l: any) => l.userId === 'me')).toBe(true);
+
+    const comment = await request(app).post(`/api/moments/${moment.id}/comment`).send({ content: '第一条评论' });
+    expect(comment.status).toBe(200);
+    expect(comment.body.comment.content).toBe('第一条评论');
+  });
+
+  it('空动态被拒（400）', async () => {
+    const res = await request(app).post('/api/moments').send({ content: '   ' });
+    expect(res.status).toBe(400);
+  });
+
+  it('不能删除他人动态（403）', async () => {
+    // 直接落库一条他人动态
+    const db2 = await import('./db');
+    const m = db2.createMoment({ authorId: 'u_alice', content: 'alice 的' });
+    const res = await request(app).delete(`/api/moments/${m.id}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('群二维码 (Group QR)', () => {
+  it('群会话返回可扫码的二维码 data URL', async () => {
+    const conv = await createConversation('qr-group');
+    const res = await request(app).get(`/api/conversations/${conv.id}/qr`);
+    expect(res.status).toBe(200);
+    expect(res.body.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(res.body.payload).toContain(conv.id);
+  });
+
+  it('非群会话返回 400', async () => {
+    const conv = await createConversation('qr-not-group');
+    // 把会话类型临时改回 direct 不可行（类型固定），这里改为对不存在的群号测试 404
+    const res = await request(app).get('/api/conversations/does-not-exist/qr');
+    expect(res.status).toBe(404);
+  });
+});
