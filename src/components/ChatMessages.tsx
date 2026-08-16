@@ -102,21 +102,32 @@ const REACTION_EMOJIS = ['👍', '❤️', '😂', '😍', '🎉', '😢'];
 // 图片气泡：加载失败时回退为占位块，避免「裂图」破坏对称布局
 function ImageBubble({ imagePath, onPreview }: { imagePath: string; onPreview?: (imagePath: string) => void }) {
   const [err, setErr] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   if (err) {
     return (
-      <div className="flex items-center justify-center w-[200px] h-[150px] rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+      <div className="flex items-center justify-center w-[240px] h-[180px] rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
         <span className="text-xs">图片加载失败</span>
       </div>
     );
   }
   return (
-    <img
-      src={`/api/image/${imagePath}`}
-      alt="图片"
-      onError={() => setErr(true)}
-      className="max-w-[240px] max-h-[280px] rounded-lg object-contain cursor-pointer"
+    <div
+      className="relative rounded-lg overflow-hidden cursor-pointer"
+      style={{ border: '1px solid var(--td-component-stroke)', maxWidth: 260 }}
       onClick={() => onPreview ? onPreview(imagePath) : window.open(`/api/image/${imagePath}`, '_blank')}
-    />
+    >
+      {!loaded && (
+        <div className="absolute inset-0 animate-pulse" style={{ backgroundColor: 'var(--td-bg-color-component)' }} />
+      )}
+      <img
+        src={`/api/image/${imagePath}`}
+        alt="图片"
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => setErr(true)}
+        className="block max-w-[260px] max-h-[320px] rounded-lg object-contain"
+      />
+    </div>
   );
 }
 
@@ -175,7 +186,10 @@ function MergedBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
 // 大表情（贴纸）：无气泡背景，大号展示
 function StickerBubble({ content }: { content: string }) {
   return (
-    <div className="text-[64px] leading-none select-none" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))' }}>
+    <div
+      className="text-[64px] leading-none select-none max-w-[min(72vw,360px)] break-words"
+      style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.18))' }}
+    >
       {content}
     </div>
   );
