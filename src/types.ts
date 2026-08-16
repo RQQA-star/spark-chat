@@ -24,6 +24,10 @@ export interface Contact {
   avatarColor?: string;
   isAgent: boolean;
   status: string;
+  /** 本地备注（仅自己可见） */
+  remark?: string | null;
+  /** 是否星标朋友 */
+  starred?: boolean;
   agentConfig?: AgentConfig | null;
 }
 
@@ -56,6 +60,8 @@ export interface Conversation {
   unreadCount?: number;
   pinned?: boolean;
   muted?: boolean;
+  /** 群公告 */
+  announcement?: string | null;
 }
 
 export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged';
@@ -112,6 +118,20 @@ export interface PermissionRequest {
   input: Record<string, unknown>;
   conversationId: string;
   timestamp: number;
+}
+
+export interface Favorite {
+  id: string;
+  messageId: string;
+  conversationId: string;
+  senderId?: string | null;
+  senderName?: string;
+  msgType?: string | null;
+  content?: string | null;
+  imagePath?: string | null;
+  fileName?: string | null;
+  filePath?: string | null;
+  createdAt: string;
 }
 
 export type Theme = 'light' | 'dark';

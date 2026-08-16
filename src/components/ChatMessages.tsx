@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import { Loading } from 'tdesign-react';
 import { ChatMarkdown } from '@tdesign-react/chat';
-import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, MoreVertical, File as FileIcon, Pencil } from 'lucide-react';
+import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, MoreVertical, File as FileIcon, Pencil, Star } from 'lucide-react';
 import { ConvMessage, Contact, PermissionRequest } from '../types';
 import { ToolCallsCollapse } from './ToolCallsCollapse';
 import { InlinePermissionCard } from './InlinePermissionCard';
@@ -24,6 +24,11 @@ interface ChatMessagesProps {
   onRecall?: (id: string) => void;
   onToggleReaction?: (id: string, emoji: string) => void;
   scrollRef?: React.RefObject<HTMLDivElement>;
+  // 大图灯箱 / 个人名片页
+  onPreviewImage?: (imagePath: string) => void;
+  onPreviewContact?: (contactId: string) => void;
+  // 收藏
+  onFavorite?: (id: string) => void;
   // 多选模式
   multiSelect?: boolean;
   selection?: Set<string>;
@@ -88,7 +93,7 @@ function previewOf(m: ConvMessage): string {
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😍', '🎉', '😢'];
 
 // 图片气泡：加载失败时回退为占位块，避免「裂图」破坏对称布局
-function ImageBubble({ imagePath }: { imagePath: string }) {
+function ImageBubble({ imagePath, onPreview }: { imagePath: string; onPreview?: (imagePath: string) => void }) {
   const [err, setErr] = useState(false);
   if (err) {
     return (
@@ -103,7 +108,7 @@ function ImageBubble({ imagePath }: { imagePath: string }) {
       alt="图片"
       onError={() => setErr(true)}
       className="max-w-[240px] max-h-[280px] rounded-lg object-contain cursor-pointer"
-      onClick={() => window.open(`/api/image/${imagePath}`, '_blank')}
+      onClick={() => onPreview ? onPreview(imagePath) : window.open(`/api/image/${imagePath}`, '_blank')}
     />
   );
 }
@@ -191,6 +196,7 @@ function Reactions({ msg, meId, onToggle }: { msg: ConvMessage; meId: string; on
 export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,
   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, scrollRef,
+  onPreviewImage, onPreviewContact, onFavorite,
   multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
 }: ChatMessagesProps) {
   const getContact = (id: string): Contact | undefined => contacts.find(c => c.id === id);
@@ -247,6 +253,7 @@ export function ChatMessages({
     if (canEdit(msg)) items.push({ label: '编辑', icon: <Pencil size={14} />, onClick: () => startEdit(msg) });
     if (canRecall(msg) && onRecall) items.push({ label: '撤回', icon: <Reply size={14} style={{ transform: 'scaleX(-1)' }} />, onClick: () => { onRecall(msg.id); setMenu(null); } });
     items.push({ label: '多选', icon: <Check size={14} />, onClick: () => { onEnterMultiSelect(msg.id); setMenu(null); } });
+    if (onFavorite && !msg.recalled) items.push({ label: '收藏', icon: <Star size={14} />, onClick: () => { onFavorite(msg.id); setMenu(null); } });
     if (onDeleteMessage) items.push({ label: '删除', icon: <Trash2 size={14} />, onClick: () => { onDeleteMessage(msg.id); setMenu(null); }, danger: true });
     return items;
   };
@@ -329,8 +336,9 @@ export function ChatMessages({
                 </button>
               ) : (
                 <div
-                  className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white"
+                  className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white cursor-pointer"
                   style={{ backgroundColor: avatarColor, fontSize: 14 }}
+                  onClick={() => { if (!isMe && onPreviewContact) onPreviewContact(msg.senderId); }}
                 >
                   {isMe ? <User size={16} /> : (contact?.isAgent ? <Bot size={16} /> : avatarText)}
                 </div>
@@ -393,7 +401,7 @@ export function ChatMessages({
 
                     {msg.msgType === 'image' && msg.imagePath && (
                       <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
-                        <ImageBubble imagePath={msg.imagePath} />
+                        <ImageBubble imagePath={msg.imagePath} onPreview={onPreviewImage} />
                       </div>
                     )}
 

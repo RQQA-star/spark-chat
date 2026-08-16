@@ -12,6 +12,7 @@ interface GroupManagePanelProps {
   onAddMember: (convId: string, contactId: string) => Promise<unknown>;
   onRemoveMember: (convId: string, contactId: string) => Promise<unknown>;
   onRename: (convId: string, title: string) => Promise<unknown>;
+  onSetAnnouncement: (convId: string, text: string) => Promise<unknown>;
   onReloadMessages: () => void;
 }
 
@@ -28,14 +29,15 @@ function MemberAvatar({ text, color, size = 36 }: { text?: string | null; color?
 
 export function GroupManagePanel({
   visible, conversation, contacts, meId, onClose,
-  onAddMember, onRemoveMember, onRename, onReloadMessages,
+  onAddMember, onRemoveMember, onRename, onSetAnnouncement, onReloadMessages,
 }: GroupManagePanelProps) {
   const [title, setTitle] = useState(conversation.title || '');
+  const [announcement, setAnnouncement] = useState(conversation.announcement || '');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (visible) setTitle(conversation.title || '');
-  }, [visible, conversation.title]);
+    if (visible) { setTitle(conversation.title || ''); setAnnouncement(conversation.announcement || ''); }
+  }, [visible, conversation.title, conversation.announcement]);
 
   const memberMap = useMemo(() => {
     const map = new Map<string, Contact>();
@@ -102,6 +104,19 @@ export function GroupManagePanel({
     }
   };
 
+  const handleSetAnnouncement = async () => {
+    const next = announcement.trim();
+    if (next === (conversation.announcement || '').trim()) return;
+    setBusy(true);
+    try {
+      await onSetAnnouncement(conversation.id, next);
+      if (next) await postSystem(`群公告已更新`);
+      onReloadMessages();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Dialog
       visible={visible}
@@ -128,6 +143,32 @@ export function GroupManagePanel({
             >
               保存
             </Button>
+          </div>
+        </div>
+
+        {/* 群公告 */}
+        <div>
+          <div className="text-sm mb-2" style={{ color: 'var(--td-text-color-secondary)' }}>群公告</div>
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={announcement}
+              onChange={e => setAnnouncement(e.target.value)}
+              placeholder="发布群公告，群成员会在会话顶部看到"
+              rows={3}
+              maxLength={1000}
+              className="w-full px-3 py-2 rounded-lg outline-none resize-none text-sm"
+              style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-primary)', border: '1px solid var(--td-component-stroke)' }}
+            />
+            <div className="flex justify-end">
+              <Button
+                size="small"
+                icon={<Check />}
+                onClick={handleSetAnnouncement}
+                disabled={busy || announcement.trim() === (conversation.announcement || '').trim()}
+              >
+                发布
+              </Button>
+            </div>
           </div>
         </div>
 

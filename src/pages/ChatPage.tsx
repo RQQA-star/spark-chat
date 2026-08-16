@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Button, Tooltip, Loading } from 'tdesign-react';
-import { Monitor, ArrowLeft, Trash2, MessageCircle, Users, Bot } from 'lucide-react';
+import { Monitor, ArrowLeft, Trash2, MessageCircle, Users, Bot, Megaphone } from 'lucide-react';
 import { Conversation, Contact, ConvMessage, PermissionRequest } from '../types';
 import { ChatMessages } from '../components/ChatMessages';
 import { ChatInput } from '../components/ChatInput';
@@ -34,6 +34,9 @@ interface ChatPageProps {
   onToggleReaction?: (id: string, emoji: string) => void;
   onDeleteMessages?: (ids: string[]) => void;
   onBatchForward?: (ids: string[]) => void;
+  onPreviewImage?: (imagePath: string) => void;
+  onPreviewContact?: (contactId: string) => void;
+  onFavorite?: (id: string) => void;
   typingMembers: string[];
   loadOlderMessages: () => Promise<void>;
   hasMoreMessages: boolean;
@@ -56,6 +59,7 @@ export function ChatPage({
   isAgentConversation, agentName, onSendText, onSendVoice, onSendImage, onSendFile, onSendAgentAssist, onStop,
   onPermissionAllow, onPermissionDeny, onOpenRemoteAssist, onOpenAgentConfig, onBack,   onClearMessages, onDeleteMessage,
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
+  onPreviewImage, onPreviewContact, onFavorite,
   typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, onManageGroup, remoteAssistActive,
 }: ChatPageProps) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -196,6 +200,17 @@ export function ChatPage({
         )}
       </header>
 
+      {/* 群公告横幅 */}
+      {conversation.type === 'group' && conversation.announcement && (
+        <div
+          className="px-4 py-2 flex items-start gap-2 text-xs flex-shrink-0"
+          style={{ backgroundColor: 'rgba(245,158,11,0.12)', color: 'var(--td-text-color-secondary)', borderBottom: '1px solid var(--td-component-stroke)' }}
+        >
+          <Megaphone size={14} className="flex-shrink-0 mt-0.5" style={{ color: '#d97706' }} />
+          <span className="flex-1 leading-relaxed break-words">{conversation.announcement}</span>
+        </div>
+      )}
+
       {/* 消息区 */}
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-6" style={{ backgroundColor: 'var(--td-bg-color-page)' }}>
         <div className="flex justify-center py-2 h-8">
@@ -234,6 +249,9 @@ export function ChatPage({
             selection={selection}
             onToggleSelect={onToggleSelect}
             onEnterMultiSelect={onEnterMultiSelect}
+            onPreviewImage={onPreviewImage}
+            onPreviewContact={onPreviewContact}
+            onFavorite={onFavorite}
             onReply={(id) => setReplyTo(messages.find(m => m.id === id) || null)}
           />
         )}

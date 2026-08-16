@@ -6,6 +6,7 @@ import { useTheme } from './hooks/useTheme';
 import { useContacts } from './hooks/useContacts';
 import { useConversations } from './hooks/useConversations';
 import { useMessages } from './hooks/useMessages';
+import { useFavorites } from './hooks/useFavorites';
 
 import { Sidebar } from './components/Sidebar';
 import { ChatPage } from './pages/ChatPage';
@@ -16,14 +17,18 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { SearchModal } from './components/SearchModal';
 import { ForwardDialog } from './components/ForwardDialog';
 import { AgentConfigDialog } from './components/AgentConfigDialog';
-import { Conversation, ConvMessage, QuoteRef } from './types';
+import { Lightbox } from './components/Lightbox';
+import { ContactCardDialog } from './components/ContactCardDialog';
+import { FavoritesPanel } from './components/FavoritesPanel';
+import { Conversation, ConvMessage, Contact, QuoteRef } from './types';
 import { getNotificationState, requestNotificationPermission, setActivateHandler, setActiveConversation, NotifState } from './lib/notifications';
 import { getToken, setToken, fetchAuthConfig } from './lib/auth';
 
 export default function App() {
   const { theme, toggleTheme } = useTheme();
   const { contacts, me, getContact, agentContacts, addContact, deleteContact, updateContact } = useContacts();
-  const { conversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, fetchConversations, applyConversationUpdate, setConversationPinned, setConversationMuted } = useConversations();
+  const { conversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, setAnnouncement, fetchConversations, applyConversationUpdate, setConversationPinned, setConversationMuted, markAllRead } = useConversations();
+  const { favorites, fetchFavorites, addFavorite, removeFavorite } = useFavorites();
 
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [groupDialog, setGroupDialog] = useState(false);
@@ -35,6 +40,10 @@ export default function App() {
   const [pendingForward, setPendingForward] = useState<{ message?: ConvMessage; merged?: { title: string; content: string } } | null>(null);
   const [agentConfigOpen, setAgentConfigOpen] = useState(false);
   const [notifPerm, setNotifPerm] = useState<NotifState>(getNotificationState());
+  // P1 新交互：大图灯箱 / 个人名片页 / 收藏面板
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [cardContact, setCardContact] = useState<Contact | null>(null);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
   // 访问令牌引导：服务端启用 SPARK_ACCESS_TOKEN 且本地无令牌时，弹出输入界面
   const [needToken, setNeedToken] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -192,6 +201,28 @@ export default function App() {
     setPendingForward(null);
   }, [pendingForward, currentConversation, me.id, fetchConversations]);
 
+  // 大图灯箱
+  const handlePreviewImage = useCallback((imagePath: string) => setLightbox(imagePath), []);
+  // 个人名片页
+  const handlePreviewContact = useCallback((id: string) => {
+    const c = getContact(id);
+    if (c) setCardContact(c);
+  }, [getContact]);
+  // 收藏
+  const handleFavorite = useCallback(async (messageId: string) => {
+    if (!currentConversationId) return;
+    await addFavorite(messageId, currentConversationId);
+  }, [currentConversationId, addFavorite]);
+  // 星标朋友切换
+  const handleToggleStar = useCallback(async (id: string, starred: boolean) => {
+    await updateContact(id, { starred });
+  }, [updateContact]);
+  // 打开收藏面板
+  const openFavorites = useCallback(() => {
+    fetchFavorites();
+    setFavoritesOpen(true);
+  }, [fetchFavorites]);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ backgroundColor: 'var(--td-bg-color-page)' }}>
       <Sidebar
@@ -213,6 +244,10 @@ export default function App() {
         notifState={notifPerm}
         onTogglePin={setConversationPinned}
         onToggleMute={setConversationMuted}
+        onToggleStar={handleToggleStar}
+        onOpenContactCard={handlePreviewContact}
+        onMarkAllRead={markAllRead}
+        onOpenFavorites={openFavorites}
       />
 
       <main className="flex-1 flex flex-col min-w-0 h-full">
@@ -244,6 +279,9 @@ export default function App() {
             onDeleteMessages={deleteMessages}
             onBatchForward={handleBatchForward}
             onSendFile={sendFile}
+            onPreviewImage={handlePreviewImage}
+            onPreviewContact={handlePreviewContact}
+            onFavorite={handleFavorite}
             onRetry={retryMessage}
             typingMembers={typingMembers}
             loadOlderMessages={loadOlderMessages}
@@ -278,6 +316,7 @@ export default function App() {
           onAddMember={addMember}
           onRemoveMember={removeMember}
           onRename={renameConversation}
+          onSetAnnouncement={setAnnouncement}
           onReloadMessages={loadMessages}
         />
       )}
@@ -310,6 +349,27 @@ export default function App() {
         contact={currentAgentContact}
         onClose={() => setAgentConfigOpen(false)}
         onSave={async (cfg) => { if (currentAgentContact) await updateContact(currentAgentContact.id, { agentConfig: cfg }); }}
+      />
+
+      <Lightbox imagePath={lightbox} onClose={() => setLightbox(null)} />
+
+      <ContactCardDialog
+        visible={!!cardContact}
+        contact={cardContact}
+        meId={me.id}
+        onClose={() => setCardContact(null)}
+        onSaveRemark={async (id, remark) => { await updateContact(id, { remark }); }}
+        onToggleStar={handleToggleStar}
+        onMessage={handleSelectContact}
+      />
+
+      <FavoritesPanel
+        visible={favoritesOpen}
+        favorites={favorites}
+        loading={false}
+        onClose={() => setFavoritesOpen(false)}
+        onRemove={removeFavorite}
+        onOpenConversation={(cid) => { setCurrentConversationId(cid); }}
       />
 
       {needToken && (

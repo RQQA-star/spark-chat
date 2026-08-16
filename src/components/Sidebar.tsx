@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tooltip, Input, Dialog } from 'tdesign-react';
-import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin } from 'lucide-react';
+import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin, Star, CheckCheck } from 'lucide-react';
 import { Contact, Conversation } from '../types';
 import { NotifState } from '../lib/notifications';
 import { AddContactDialog } from './AddContactDialog';
@@ -16,7 +16,7 @@ interface SidebarProps {
   onDeleteConversation: (id: string) => void;
   onAddContact: (name: string, color?: string) => Promise<unknown>;
   onDeleteContact: (id: string) => void;
-  onEditContact: (id: string, updates: { name?: string; avatarText?: string; avatarColor?: string }) => Promise<unknown> | void;
+  onEditContact: (id: string, updates: { name?: string; avatarText?: string; avatarColor?: string; remark?: string; starred?: boolean }) => Promise<unknown> | void;
   onOpenSettings: () => void;
   onOpenSearch: () => void;
   theme: string;
@@ -25,6 +25,10 @@ interface SidebarProps {
   notifState?: NotifState;
   onTogglePin?: (id: string, pinned: boolean) => void;
   onToggleMute?: (id: string, muted: boolean) => void;
+  onToggleStar?: (id: string, starred: boolean) => void;
+  onOpenContactCard?: (id: string) => void;
+  onMarkAllRead?: () => void;
+  onOpenFavorites?: () => void;
 }
 
 function Avatar({ text, color, size = 40 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -73,6 +77,7 @@ export function Sidebar({
   conversations, contacts, currentConversationId, onSelectConversation,
   onSelectContact, onCreateGroup, onDeleteConversation, onAddContact, onDeleteContact, onEditContact, onOpenSettings, onOpenSearch, theme, onToggleTheme,
   onEnableNotifications, notifState = 'default', onTogglePin, onToggleMute,
+  onToggleStar, onOpenContactCard, onMarkAllRead, onOpenFavorites,
 }: SidebarProps) {
   const [tab, setTab] = useState<'chat' | 'contacts'>('chat');
   const [search, setSearch] = useState('');
@@ -81,6 +86,7 @@ export function Sidebar({
   const [delTarget, setDelTarget] = useState<Contact | null>(null);
   const humans = contacts.filter(c => !c.isAgent && c.id !== 'me');
   const agents = contacts.filter(c => c.isAgent);
+  const starredContacts = contacts.filter(c => c.starred && !c.isAgent && c.id !== 'me');
   const meContact = contacts.find(c => c.id === 'me');
   const q = search.trim().toLowerCase();
   const filteredHumans = q ? humans.filter(c => c.name.toLowerCase().includes(q)) : humans;
@@ -111,6 +117,7 @@ export function Sidebar({
         </div>
         <div className="flex flex-col items-center gap-1 mb-1">
           <RailIcon title="搜索聊天记录" onClick={onOpenSearch}><Search size={18} /></RailIcon>
+          <RailIcon title="我的收藏" onClick={onOpenFavorites}><Star size={18} /></RailIcon>
           <RailIcon title={theme === 'dark' ? '切换为浅色' : '切换为深色'} onClick={onToggleTheme}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</RailIcon>
           <Tooltip content={notifState === 'granted' ? '桌面通知已开启' : notifState === 'denied' ? '通知被浏览器拦截，请在站点设置中允许' : notifState === 'unsupported' ? '当前环境不支持桌面通知' : '开启被 @ 时的桌面通知'}>
             <RailIcon title="桌面通知" onClick={onEnableNotifications} disabled={notifState === 'unsupported'}>
@@ -140,6 +147,11 @@ export function Sidebar({
           <Tooltip content="发起群聊">
             <button onClick={onCreateGroup} className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-secondary)' }}>
               <Plus />
+            </button>
+          </Tooltip>
+          <Tooltip content="全部标记为已读">
+            <button onClick={() => onMarkAllRead?.()} className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-secondary)' }}>
+              <CheckCheck />
             </button>
           </Tooltip>
         </div>
@@ -229,7 +241,7 @@ export function Sidebar({
                 <div className="px-3 pt-2 pb-1 text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>智能助手</div>
               )}
               {agents.map(c => (
-                <div key={c.id} onClick={() => onSelectContact(c.id)} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]">
+                <div key={c.id} onClick={() => onOpenContactCard?.(c.id) ?? onSelectContact(c.id)} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]">
                   <Avatar text={c.avatarText} color={c.avatarColor} />
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-sm font-medium" style={{ color: 'var(--td-text-color-primary)' }}>{c.name}</div>
@@ -246,6 +258,34 @@ export function Sidebar({
                   </Tooltip>
                 </div>
               ))}
+              {/* 星标朋友 */}
+              {!q && starredContacts.length > 0 && (
+                <>
+                  <div className="px-3 pt-3 pb-1 text-xs flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}>
+                    <Star size={12} fill="#faad14" color="#faad14" /> 星标朋友
+                  </div>
+                  {starredContacts.map(c => (
+                    <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]" onClick={() => onOpenContactCard?.(c.id)}>
+                      <Avatar text={c.avatarText} color={c.avatarColor} />
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate text-sm font-medium" style={{ color: 'var(--td-text-color-primary)' }}>{c.remark || c.name}</div>
+                        {c.remark && <div className="truncate text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>{c.name}</div>}
+                      </div>
+                      {onToggleStar && (
+                        <Tooltip content="取消星标">
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                            onClick={e => { e.stopPropagation(); onToggleStar(c.id, false); }}
+                            style={{ color: '#faad14' }}
+                          >
+                            <Star size={15} fill="#faad14" />
+                          </button>
+                        </Tooltip>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
               <div className="flex items-center justify-between px-3 pt-3 pb-1">
                 <span className="text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>联系人{q ? `（${filteredHumans.length}）` : ''}</span>
                 <Tooltip content="添加联系人">
@@ -260,9 +300,23 @@ export function Sidebar({
                 </div>
               )}
               {filteredHumans.map(c => (
-                <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]" onClick={() => onSelectContact(c.id)}>
+                <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]" onClick={() => onOpenContactCard?.(c.id) ?? onSelectContact(c.id)}>
                   <Avatar text={c.avatarText} color={c.avatarColor} />
-                  <div className="truncate text-sm font-medium flex-1" style={{ color: 'var(--td-text-color-primary)' }}>{c.name}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-sm font-medium" style={{ color: 'var(--td-text-color-primary)' }}>{c.remark || c.name}</div>
+                    {c.remark && <div className="truncate text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>{c.name}</div>}
+                  </div>
+                  {onToggleStar && (
+                    <Tooltip content={c.starred ? '取消星标' : '设为星标'}>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        onClick={e => { e.stopPropagation(); onToggleStar(c.id, !c.starred); }}
+                        style={{ color: c.starred ? '#faad14' : 'var(--td-text-color-secondary)' }}
+                      >
+                        <Star size={15} fill={c.starred ? '#faad14' : 'none'} />
+                      </button>
+                    </Tooltip>
+                  )}
                   <Tooltip content="编辑联系人">
                     <button
                       className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"

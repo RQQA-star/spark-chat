@@ -107,6 +107,8 @@ export interface DbContact {
   is_agent: number;             // 0 | 1
   agent_config: string | null;  // JSON
   status: string;
+  remark: string | null;        // 联系人备注（仅本地用户可见）
+  starred: number;              // 星标朋友 0 | 1
   created_at: string;
 }
 
@@ -120,6 +122,7 @@ export interface DbConversation {
   remote_assist_active: number; // 0 | 1
   pinned: number;               // 0 | 1
   muted: number;                // 0 | 1
+  announcement: string | null;  // 群公告
   created_at: string;
   updated_at: string;
 }
@@ -246,10 +249,32 @@ if (!msgCols.some(c => c.name === 'file_mime')) db.exec("ALTER TABLE messages AD
 if (!msgCols.some(c => c.name === 'file_path')) db.exec("ALTER TABLE messages ADD COLUMN file_path TEXT");
 if (!msgCols.some(c => c.name === 'reactions')) db.exec("ALTER TABLE messages ADD COLUMN reactions TEXT");
 
-// 迁移：会话置顶 / 免打扰
+// 迁移：会话置顶 / 免打扰 / 群公告
 const convCols = db.prepare("PRAGMA table_info(conversations)").all() as { name: string }[];
 if (!convCols.some(c => c.name === 'pinned')) db.exec("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
 if (!convCols.some(c => c.name === 'muted')) db.exec("ALTER TABLE conversations ADD COLUMN muted INTEGER NOT NULL DEFAULT 0");
+if (!convCols.some(c => c.name === 'announcement')) db.exec("ALTER TABLE conversations ADD COLUMN announcement TEXT");
+
+// 迁移：联系人备注 / 星标朋友
+const contactCols = db.prepare("PRAGMA table_info(contacts)").all() as { name: string }[];
+if (!contactCols.some(c => c.name === 'remark')) db.exec("ALTER TABLE contacts ADD COLUMN remark TEXT");
+if (!contactCols.some(c => c.name === 'starred')) db.exec("ALTER TABLE contacts ADD COLUMN starred INTEGER NOT NULL DEFAULT 0");
+
+// 收藏表（消息收藏）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS favorites (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    sender_id TEXT,
+    msg_type TEXT,
+    content TEXT,
+    image_path TEXT,
+    file_name TEXT,
+    file_path TEXT,
+    created_at TEXT NOT NULL
+  );
+`);
 
 seedIfEmpty();
 
@@ -293,7 +318,7 @@ export function deleteContact(id: string): boolean {
 // 更新联系人（名称/头像/AI 配置）。agentConfig 以对象传入，内部序列化为 JSON 存入 agent_config。
 export function updateContact(
   id: string,
-  updates: { name?: string; avatarText?: string; avatarColor?: string; agentConfig?: unknown },
+  updates: { name?: string; avatarText?: string; avatarColor?: string; agentConfig?: unknown; remark?: string; starred?: boolean },
 ): DbContact | undefined {
   const c = getContact(id);
   if (!c) return undefined;
@@ -303,6 +328,8 @@ export function updateContact(
   if (updates.avatarText !== undefined) { sets.push('avatar_text = ?'); vals.push(updates.avatarText); }
   if (updates.avatarColor !== undefined) { sets.push('avatar_color = ?'); vals.push(updates.avatarColor); }
   if (updates.agentConfig !== undefined) { sets.push('agent_config = ?'); vals.push(JSON.stringify(updates.agentConfig)); }
+  if (updates.remark !== undefined) { sets.push('remark = ?'); vals.push(updates.remark || null); }
+  if (updates.starred !== undefined) { sets.push('starred = ?'); vals.push(updates.starred ? 1 : 0); }
   if (sets.length === 0) return c;
   vals.push(id);
   db.prepare(`UPDATE contacts SET ${sets.join(', ')} WHERE id = ?`).run(...(vals as unknown[]));
@@ -374,13 +401,14 @@ export function createConversation(input: CreateConversationInput): DbConversati
   return getConversation(id)!;
 }
 
-export function updateConversation(id: string, updates: Partial<Pick<DbConversation, 'title' | 'avatar_text' | 'avatar_color' | 'remote_assist_active'>> & { pinned?: boolean; muted?: boolean }): boolean {
+export function updateConversation(id: string, updates: Partial<Pick<DbConversation, 'title' | 'avatar_text' | 'avatar_color' | 'remote_assist_active' | 'announcement'>> & { pinned?: boolean; muted?: boolean }): boolean {
   const fields: string[] = [];
   const values: any[] = [];
   if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
   if (updates.avatar_text !== undefined) { fields.push('avatar_text = ?'); values.push(updates.avatar_text); }
   if (updates.avatar_color !== undefined) { fields.push('avatar_color = ?'); values.push(updates.avatar_color); }
   if (updates.remote_assist_active !== undefined) { fields.push('remote_assist_active = ?'); values.push(updates.remote_assist_active); }
+  if (updates.announcement !== undefined) { fields.push('announcement = ?'); values.push(updates.announcement || null); }
   if (updates.pinned !== undefined) { fields.push('pinned = ?'); values.push(updates.pinned ? 1 : 0); }
   if (updates.muted !== undefined) { fields.push('muted = ?'); values.push(updates.muted ? 1 : 0); }
   if (fields.length === 0) return false;
@@ -425,6 +453,7 @@ export interface SerializedConversation {
   remoteAssistActive: boolean;
   pinned: boolean;
   muted: boolean;
+  announcement: string | null;
   participantIds: string[];
   lastMessage: {
     content: string;
@@ -475,6 +504,7 @@ export function serializeConversation(c: DbConversation): SerializedConversation
     remoteAssistActive: !!c.remote_assist_active,
     pinned: !!c.pinned,
     muted: !!c.muted,
+    announcement: c.announcement,
     participantIds: getConversationParticipants(c.id),
     lastMessage,
     messageCount: getMessageCount(c.id),
@@ -579,6 +609,7 @@ export function getAllConversationsSerialized(): SerializedConversation[] {
       remoteAssistActive: !!c.remote_assist_active,
       pinned: !!c.pinned,
       muted: !!c.muted,
+      announcement: c.announcement,
       participantIds: partMap.get(c.id) || [],
       lastMessage,
       messageCount: countMap.get(c.id) || 0,
@@ -871,6 +902,59 @@ export function removeParticipant(conversationId: string, contactId: string): bo
 // 优雅关闭：释放 SQLite 连接（进程退出 / 容器停止时调用）。
 export function closeDb(): void {
   try { db.close(); } catch { /* 已关闭或不可关闭，忽略 */ }
+}
+
+// ============= 收藏（消息收藏） =============
+export interface DbFavorite {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  sender_id: string | null;
+  msg_type: string | null;
+  content: string | null;
+  image_path: string | null;
+  file_name: string | null;
+  file_path: string | null;
+  created_at: string;
+}
+
+export function addFavorite(input: {
+  messageId: string;
+  conversationId: string;
+  senderId?: string | null;
+  msgType?: string | null;
+  content?: string | null;
+  imagePath?: string | null;
+  fileName?: string | null;
+  filePath?: string | null;
+}): DbFavorite {
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO favorites (id, message_id, conversation_id, sender_id, msg_type, content, image_path, file_name, file_path, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, input.messageId, input.conversationId, input.senderId ?? null, input.msgType ?? null,
+    input.content ?? null, input.imagePath ?? null, input.fileName ?? null, input.filePath ?? null, now,
+  );
+  return getFavorite(id)!;
+}
+
+export function getFavorite(id: string): DbFavorite | undefined {
+  return db.prepare('SELECT * FROM favorites WHERE id = ?').get(id) as DbFavorite | undefined;
+}
+
+export function getAllFavorites(): DbFavorite[] {
+  return db.prepare('SELECT * FROM favorites ORDER BY created_at DESC').all() as DbFavorite[];
+}
+
+export function deleteFavorite(id: string): boolean {
+  return db.prepare('DELETE FROM favorites WHERE id = ?').run(id).changes > 0;
+}
+
+// 某条消息是否已被收藏（用于前端菜单项动态显示"已收藏"）
+export function isFavorited(messageId: string): boolean {
+  return (db.prepare('SELECT COUNT(*) as c FROM favorites WHERE message_id = ?').get(messageId) as { c: number }).c > 0;
 }
 
 export default db;

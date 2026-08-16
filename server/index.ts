@@ -192,6 +192,8 @@ app.get("/api/contacts", (req, res) => {
     const contacts = db.getAllContacts().map(c => ({
       id: c.id, name: c.name, avatarText: c.avatar_text, avatarColor: c.avatar_color,
       isAgent: !!c.is_agent, status: c.status,
+      remark: c.remark || null,
+      starred: !!c.starred,
       agentConfig: c.agent_config ? JSON.parse(c.agent_config) : null,
     }));
     res.json({ contacts, me: { id: db.ME_ID, name: '我' } });
@@ -233,8 +235,8 @@ app.delete("/api/contacts/:id", (req, res) => {
 // 更新联系人（名称/头像/AI 配置）
 app.patch("/api/contacts/:id", (req, res) => {
   try {
-    const { name, avatarText, avatarColor, agentConfig } = req.body || {};
-    const updates: { name?: string; avatarText?: string; avatarColor?: string; agentConfig?: unknown } = {};
+    const { name, avatarText, avatarColor, agentConfig, remark, starred } = req.body || {};
+    const updates: { name?: string; avatarText?: string; avatarColor?: string; agentConfig?: unknown; remark?: string; starred?: boolean } = {};
     if (name !== undefined) {
       if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: '联系人名称不能为空' });
       updates.name = name.trim();
@@ -248,12 +250,23 @@ app.patch("/api/contacts/:id", (req, res) => {
       }
       updates.agentConfig = agentConfig;
     }
+    if (remark !== undefined) {
+      if (remark !== null && (typeof remark !== 'string' || remark.length > 200)) {
+        return res.status(400).json({ error: '备注过长（上限 200 字）' });
+      }
+      updates.remark = remark || null;
+    }
+    if (starred !== undefined) {
+      if (typeof starred !== 'boolean') return res.status(400).json({ error: 'starred 必须为布尔值' });
+      updates.starred = starred;
+    }
     const updated = db.updateContact(req.params.id, updates);
     if (!updated) return res.status(404).json({ error: '联系人不存在' });
     res.json({
       contact: {
         id: updated.id, name: updated.name, avatarText: updated.avatar_text,
         avatarColor: updated.avatar_color, isAgent: !!updated.is_agent, status: updated.status,
+        remark: updated.remark || null, starred: !!updated.starred,
         agentConfig: updated.agent_config ? JSON.parse(updated.agent_config) : null,
       },
     });
@@ -307,12 +320,16 @@ app.delete("/api/conversations/:id", (req, res) => {
 // 更新会话（群名称 / 头像等）
 app.patch("/api/conversations/:id", (req, res) => {
   try {
-    const updates: { title?: string; avatarText?: string; avatarColor?: string; pinned?: boolean; muted?: boolean } = {};
+    const updates: { title?: string; avatarText?: string; avatarColor?: string; pinned?: boolean; muted?: boolean; announcement?: string } = {};
     if (typeof req.body.title === 'string') updates.title = req.body.title;
     if (typeof req.body.avatarText === 'string') updates.avatarText = req.body.avatarText;
     if (typeof req.body.avatarColor === 'string') updates.avatarColor = req.body.avatarColor;
     if (typeof req.body.pinned === 'boolean') updates.pinned = req.body.pinned;
     if (typeof req.body.muted === 'boolean') updates.muted = req.body.muted;
+    if (typeof req.body.announcement === 'string') {
+      if (req.body.announcement.length > 1000) return res.status(400).json({ error: '群公告过长（上限 1000 字）' });
+      updates.announcement = req.body.announcement;
+    }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: '没有可更新的字段' });
     }
@@ -511,6 +528,73 @@ app.delete("/api/conversations/:id/participants/:contactId", (req, res) => {
     res.json({ success: ok, participantIds: db.getConversationParticipants(req.params.id) });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || '移除成员失败' });
+  }
+});
+
+// ============= 收藏（消息收藏） =============
+function serializeFavorite(f: any) {
+  const sender = f.sender_id ? db.getContact(f.sender_id) : undefined;
+  return {
+    id: f.id,
+    messageId: f.message_id,
+    conversationId: f.conversation_id,
+    senderId: f.sender_id,
+    senderName: sender ? sender.name : (f.sender_id === db.ME_ID ? '我' : (f.sender_id || '')),
+    msgType: f.msg_type,
+    content: f.content,
+    imagePath: f.image_path,
+    fileName: f.file_name,
+    filePath: f.file_path,
+    createdAt: f.created_at,
+  };
+}
+
+// 收藏一条消息（幂等：重复收藏不报错，返回已存在的记录）
+app.post("/api/favorites", (req, res) => {
+  try {
+    const { messageId, conversationId } = req.body || {};
+    if (!messageId || !conversationId) return res.status(400).json({ error: '缺少 messageId / conversationId' });
+    const existing = db.getAllFavorites().find(f => f.message_id === messageId);
+    if (existing) return res.json({ favorite: serializeFavorite(existing), already: true });
+    const msg = db.getMessage(messageId);
+    if (!msg) return res.status(404).json({ error: '消息不存在' });
+    const fav = db.addFavorite({
+      messageId, conversationId,
+      senderId: msg.sender_id, msgType: msg.msg_type, content: msg.content,
+      imagePath: msg.image_path, fileName: msg.file_name, filePath: msg.file_path,
+    });
+    res.json({ favorite: serializeFavorite(fav) });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '收藏失败' });
+  }
+});
+
+app.get("/api/favorites", (req, res) => {
+  try {
+    const favorites = db.getAllFavorites().map(serializeFavorite);
+    res.json({ favorites });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '获取收藏失败' });
+  }
+});
+
+app.delete("/api/favorites/:id", (req, res) => {
+  try {
+    const ok = db.deleteFavorite(req.params.id);
+    res.json({ success: ok });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '取消收藏失败' });
+  }
+});
+
+// 一键全部已读（批量标记所有会话的消息为已读）
+app.post("/api/conversations/read-all", (req, res) => {
+  try {
+    const convs = db.getAllConversations();
+    for (const c of convs) db.markConversationRead(c.id);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || '操作失败' });
   }
 });
 

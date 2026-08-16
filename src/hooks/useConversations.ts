@@ -87,6 +87,18 @@ export function useConversations() {
     }
   }, []);
 
+  const setAnnouncement = useCallback(async (convId: string, announcement: string) => {
+    const res = await fetch(`/api/conversations/${convId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ announcement }),
+    });
+    const data = await res.json();
+    if (data.conversation) {
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, announcement: data.conversation.announcement } : c));
+    }
+  }, []);
+
   // 跨客户端实时同步：合并后端广播的 conversation:update 到列表（群名/头像/成员变更）
   const applyConversationUpdate = useCallback((conv: Conversation) => {
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, ...conv } : c));
@@ -112,5 +124,13 @@ export function useConversations() {
     if (data.conversation) setConversations(prev => prev.map(c => c.id === id ? { ...c, muted: !!data.conversation.muted } : c));
   }, []);
 
-  return { conversations, loading, fetchConversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, applyConversationUpdate, setConversationPinned, setConversationMuted };
+  // 一键全部已读（批量清零各会话未读）
+  const markAllRead = useCallback(async () => {
+    try {
+      await fetch(`/api/conversations/read-all`, { method: 'POST' });
+    } catch { /* ignore */ }
+    setConversations(prev => prev.map(c => ({ ...c, unreadCount: 0 })));
+  }, []);
+
+  return { conversations, loading, fetchConversations, createConversation, deleteConversation, clearMessages, addMember, removeMember, renameConversation, setAnnouncement, applyConversationUpdate, setConversationPinned, setConversationMuted, markAllRead };
 }

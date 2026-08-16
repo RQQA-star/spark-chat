@@ -54,7 +54,7 @@ export function useContacts() {
 
   const updateContact = useCallback(async (
     id: string,
-    updates: { name?: string; avatarText?: string; avatarColor?: string; agentConfig?: unknown },
+    updates: { name?: string; avatarText?: string; avatarColor?: string; agentConfig?: unknown; remark?: string; starred?: boolean },
   ): Promise<Contact | null> => {
     try {
       const res = await fetch(`/api/contacts/${id}`, {
