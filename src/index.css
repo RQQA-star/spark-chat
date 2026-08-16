@@ -58,6 +58,14 @@ body {
   transition: background-color 0.3s, color 0.3s;
 }
 
+/* 主题切换平滑过渡：首屏已由 index.html 内联脚本置类，故初次渲染不触发过渡；
+   仅用户切换浅/暗时整页背景/文字/边框平滑变化 */
+*,
+*::before,
+*::after {
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
 /* ===== 自定义滚动条 ===== */
 ::-webkit-scrollbar {
   width: 6px;
