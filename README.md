@@ -22,6 +22,8 @@ npm run dev                      # 同时启动后端(3000) 与前端(5173)
 # 打开 http://localhost:5173
 ```
 
+> 要求 Node.js 22（仓库已含 `.nvmrc`，`nvm use` 即可切换）。
+
 也可分开启动：
 
 ```bash
@@ -59,7 +61,7 @@ spark-chat/
 
 ## 测试
 
-使用 vitest：`npm test`（71 测试，后端 50 + 前端 21）。后端在 `node` 环境、前端在自定义 jsdom 环境（规避本机杀软对 `node_modules/jsdom` 的锁定）。`server/index.ts` 导出 `startServer(port, host)` 供集成测试起临时端口 + 真实 `ws` 客户端。
+使用 vitest：`npm test`（71 测试，后端 57 + 前端 14）。后端在 `node` 环境、前端在 Vitest 内置 `jsdom` 环境。`server/index.ts` 导出 `startServer(port, host)` 供集成测试起临时端口 + 真实 `ws` 客户端。
 
 ```bash
 npm test           # vitest run

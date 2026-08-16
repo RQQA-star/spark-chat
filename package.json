@@ -1,6 +1,9 @@
 {
   "name": "spark-chat",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
