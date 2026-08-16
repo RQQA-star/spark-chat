@@ -251,7 +251,7 @@ npm run typecheck    # tsc -b（项目引用）
 
 ## 测试
 
-使用 vitest（node 环境跑后端、jsdom 环境跑前端）。本机 Windows 因杀软会间歇锁定 `node_modules` 导致 jsdom 加载失败，已通过自定义 `src/test/jsdom-env.mjs`（从项目外部平铺副本 `D:/spark-jsdom/pkgs/jsdom` 导入）规避；CI Linux 走标准 `node_modules/jsdom`。`@tdesign-react/chat` 在测试中别名到桩以加速。
+使用 vitest（node 环境跑后端、jsdom 环境跑前端；jsdom 为 Vitest 内置环境，跨平台稳健）。`@tdesign-react/chat` 在测试中别名到轻量桩以加速、避免加载整条重型 web-components 依赖。
 
 ```bash
 npm test             # vitest run（71 测试：server 50 + 前端 21）
