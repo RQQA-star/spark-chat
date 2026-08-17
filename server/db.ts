@@ -303,6 +303,23 @@ db.exec(`
   );
 `);
 
+// 跨机远程协助 · 操作审计账本（持久化，进程重启后可查）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS remote_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    kind TEXT NOT NULL,             -- start | request | result | close
+    action TEXT,
+    summary TEXT,                   -- 指令摘要（write_file 仅记路径+字节数，避免泄露内容）
+    ok INTEGER,                     -- 1 | 0 | NULL(非结果类)
+    error TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_remote_audit_session ON remote_audit(session_id);
+  CREATE INDEX IF NOT EXISTS idx_remote_audit_conv ON remote_audit(conversation_id);
+`);
+
 // ============= 朋友圈（Moments） =============
 // 动态表：作者 + 文本内容 + 多张图片（JSON 文件名数组）+ 创建时间
 // 必须在 seedIfEmpty() 之前建表（种子会写入示例动态）。
@@ -1202,6 +1219,53 @@ export function deleteFavorite(id: string): boolean {
 // 某条消息是否已被收藏（用于前端菜单项动态显示"已收藏"）
 export function isFavorited(messageId: string): boolean {
   return (db.prepare('SELECT COUNT(*) as c FROM favorites WHERE message_id = ?').get(messageId) as { c: number }).c > 0;
+}
+
+// ============= 跨机远程协助 · 操作审计账本 =============
+export interface RemoteAuditRow {
+  id: number;
+  session_id: string;
+  conversation_id: string;
+  ts: number;
+  kind: 'start' | 'request' | 'result' | 'close';
+  action: string | null;
+  summary: string | null;
+  ok: number | null; // 1 | 0 | null
+  error: string | null;
+}
+
+export interface InsertRemoteAuditInput {
+  sessionId: string;
+  conversationId: string;
+  ts: number;
+  kind: string;
+  action?: string;
+  summary?: string;
+  ok?: boolean;
+  error?: string;
+}
+
+/** 写入一条审计（best-effort：失败不影响协助流程） */
+export function insertRemoteAudit(input: InsertRemoteAuditInput): void {
+  db.prepare(`
+    INSERT INTO remote_audit (session_id, conversation_id, ts, kind, action, summary, ok, error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    input.sessionId, input.conversationId, input.ts, input.kind,
+    input.action ?? null, input.summary ?? null,
+    input.ok === undefined ? null : input.ok ? 1 : 0,
+    input.error ?? null,
+  );
+}
+
+/** 按 session 取审计（活动/历史会话均可，进程重启后仍可查） */
+export function getRemoteAuditBySession(sessionId: string): RemoteAuditRow[] {
+  return db.prepare('SELECT * FROM remote_audit WHERE session_id = ? ORDER BY id ASC').all(sessionId) as RemoteAuditRow[];
+}
+
+/** 按会话取全部审计（跨多次协助的账本，事后核查用） */
+export function getRemoteAuditByConversation(conversationId: string): RemoteAuditRow[] {
+  return db.prepare('SELECT * FROM remote_audit WHERE conversation_id = ? ORDER BY id ASC').all(conversationId) as RemoteAuditRow[];
 }
 
 export default db;

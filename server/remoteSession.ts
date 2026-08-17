@@ -9,6 +9,7 @@
  * 降低复杂度和风险；命令执行延迟约一个轮询周期（~1.2s），对远程排障完全可接受。
  */
 import { v4 as uuidv4 } from 'uuid';
+import { insertRemoteAudit, getRemoteAuditBySession } from './db.js';
 
 interface RemoteAction {
   id: string;
@@ -66,6 +67,19 @@ function pushAudit(session: RemoteSession, entry: RemoteAuditEntry): void {
   if (session.audit.length > MAX_AUDIT) {
     session.audit.splice(0, session.audit.length - MAX_AUDIT);
   }
+  // 持久化到 SQLite（best-effort，失败不影响协助流程）
+  try {
+    insertRemoteAudit({
+      sessionId: session.sessionId,
+      conversationId: session.conversationId,
+      ts: entry.ts,
+      kind: entry.kind,
+      action: entry.action,
+      summary: entry.summary,
+      ok: entry.ok,
+      error: entry.error,
+    });
+  } catch { /* 审计落库失败不应阻断协助 */ }
 }
 
 /** 被控端发起：按会话创建（或复用）一个活跃 session */
@@ -178,6 +192,17 @@ export function submitResult(
 /** 查询某 session 的审计记录（被控端事后核查用；未知 sessionId 返空数组） */
 export function getAudit(sessionId: string): RemoteAuditEntry[] {
   const session = sessions.get(sessionId);
-  if (!session) return [];
-  return session.audit.map((e) => ({ ...e }));
+  if (session) {
+    // 活动/刚关闭的会话：直接返回内存记录（实时、免 DB 读）
+    return session.audit.map((e) => ({ ...e }));
+  }
+  // 会话已不在内存（进程重启后）：从 SQLite 读回持久化账本
+  return getRemoteAuditBySession(sessionId).map((r) => ({
+    ts: r.ts,
+    kind: r.kind,
+    action: r.action ?? undefined,
+    summary: r.summary ?? undefined,
+    ok: r.ok === null ? undefined : !!r.ok,
+    error: r.error ?? undefined,
+  }));
 }

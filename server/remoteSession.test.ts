@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from './index.js';
 import * as remoteSession from './remoteSession.js';
+import { getRemoteAuditByConversation } from './db.js';
 
 describe('跨机远程协助 · action 中继（服务端中转）', () => {
   const conversationId = 'remote-session-test-conv';
@@ -83,5 +84,22 @@ describe('跨机远程协助 · action 中继（服务端中转）', () => {
     const req = remoteSession.getAudit(sessionId).find((e) => e.kind === 'request');
     expect(req?.summary).toContain('(5 字节)');
     remoteSession.closeSession('remote-audit-write-conv');
+  });
+
+  it('审计持久化到 SQLite（直接查账本，绕过内存 session）', () => {
+    const conv = 'remote-audit-persist-conv';
+    const { sessionId } = remoteSession.createSession(conv);
+    remoteSession.enqueueAction(conv, 'run_command', { command: 'echo persisted' });
+    const actions = remoteSession.fetchPendingActions(sessionId, '');
+    remoteSession.submitResult(sessionId, actions[0].id, { ok: true, output: 'persisted' });
+    remoteSession.closeSession(conv);
+    const rows = getRemoteAuditByConversation(conv);
+    const kinds = rows.map((r) => r.kind);
+    expect(kinds).toContain('start');
+    expect(kinds).toContain('request');
+    expect(kinds).toContain('result');
+    expect(kinds).toContain('close');
+    expect(rows.find((r) => r.kind === 'request')?.summary).toBe('echo persisted');
+    expect(rows.find((r) => r.kind === 'result')?.ok).toBe(1);
   });
 });

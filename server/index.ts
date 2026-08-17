@@ -1259,6 +1259,13 @@ app.get('/api/remote/session/:sessionId/audit', (req, res) => {
   res.json({ audit: getAudit(sessionId) });
 });
 
+// 审计账本：按会话查全部远程协助操作（跨多次协助，进程重启后仍可查）
+app.get('/api/remote/audit', (req, res) => {
+  const conversationId = String(req.query.conversationId || '');
+  if (!conversationId) return res.status(400).json({ error: '缺少 conversationId' });
+  res.json({ audit: db.getRemoteAuditByConversation(conversationId) });
+});
+
 app.post('/api/remote/session/:sessionId/result', (req, res) => {
   const sessionId = String(req.params.sessionId || '');
   const { actionId, ok, output, error } = req.body || {};
