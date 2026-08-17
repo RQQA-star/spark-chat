@@ -609,7 +609,7 @@ export function ChatMessages({
                     className="max-w-full px-2.5 py-1.5 cursor-pointer text-xs mb-1.5"
                     style={{
                       // 微信式引用：内嵌于气泡之上的半透明色带，本人绿底用透白、对方白底用浅灰
-                      backgroundColor: isMe ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.045)',
+                      backgroundColor: isMe ? 'rgba(255,255,255,0.18)' : 'var(--td-bg-color-component)',
                       borderRadius: '6px',
                       borderLeft: `2px solid ${isMe ? 'rgba(255,255,255,0.6)' : '#07c160'}`,
                     }}

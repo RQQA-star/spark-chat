@@ -186,6 +186,18 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(block).toHaveTextContent('被引用的长文本预览');
     expect(block.style.borderRadius).toBe('6px');
     expect(block.style.borderLeftWidth).toBe('2px');
+    // 本人绿泡上引用用透白叠层（深浅色均可见）
+    expect(block.style.backgroundColor).toBe('rgba(255, 255, 255, 0.18)');
+  });
+
+  it('引用块（对方消息）底色随主题变量，不在深色下失效', () => {
+    renderMessages([msg({
+      id: 'q2', senderId: 'other', content: 'hi',
+      meta: { quote: { messageId: 'y', senderName: '我', preview: '引用的内容' } },
+    })]);
+    const block = screen.getByTestId('quote-block');
+    // 关键回归：不得再用 rgba(0,0,0,...) 黑叠层（深色气泡 #1c1c1c 上几乎不可见），须随主题变量
+    expect(block.style.backgroundColor).not.toContain('rgba(0, 0, 0');
   });
 
   it('消息行头像采用微信式圆角方形（rounded，非正圆）', () => {
