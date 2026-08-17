@@ -240,6 +240,11 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     pressStartYRef.current = 'clientY' in e ? e.clientY : null;
     cancelModeRef.current = false;
     setCancelMode(false);
+    // 捕获指针：后续 move/up 全部归到本按钮，桌面端按住时鼠标移出按钮也不会误发
+    const pe = e as React.PointerEvent;
+    if (pe.currentTarget?.setPointerCapture) {
+      try { pe.currentTarget.setPointerCapture(pe.pointerId); } catch { /* 忽略：部分环境不支持 */ }
+    }
     await startRecording();
   };
 
@@ -273,6 +278,13 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
       finally { uploadingRef.current = false; }
     }
   };
+
+  // 微信式：录音达到 60s 上限自动停止并发送（与松手发送同一路径；取消模式则取消）
+  useEffect(() => {
+    if (recording && durationMs >= 60000) {
+      void handlePressEnd();
+    }
+  }, [recording, durationMs, handlePressEnd]);
 
   return (
     <div ref={rootRef} className="px-4 pb-4 pt-3" style={{ backgroundColor: 'var(--td-bg-color-page)', borderTop: '1px solid var(--td-component-stroke)' }}>
@@ -407,7 +419,6 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             onPointerDown={handlePressStart}
             onPointerMove={handlePressMove}
             onPointerUp={handlePressEnd}
-            onPointerLeave={handlePressEnd}
             onClick={e => e.preventDefault()}
             className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors select-none touch-none"
             style={{
