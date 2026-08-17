@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Dialog, Input } from 'tdesign-react';
+import { Dialog, Input, Loading } from 'tdesign-react';
 import { Search } from 'lucide-react';
 
 interface SearchResultItem {
@@ -76,6 +76,11 @@ export function SearchModal({ visible, onClose, onSelect }: SearchModalProps) {
       </div>
 
       <div className="max-h-96 overflow-y-auto -mr-2 pr-2">
+        {kw.trim() && loading && (
+          <div data-testid="search-loading" className="flex items-center justify-center gap-2 py-8 text-sm" style={{ color: 'var(--td-text-color-placeholder)' }}>
+            <Loading size="small" /> 搜索中…
+          </div>
+        )}
         {kw.trim() && !loading && results.length === 0 && (
           <div className="text-center text-sm py-8" style={{ color: 'var(--td-text-color-placeholder)' }}>没有找到相关消息</div>
         )}

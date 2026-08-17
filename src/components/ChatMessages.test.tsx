@@ -229,3 +229,25 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(clock.className).not.toContain('px-1');
   });
 });
+
+describe('ChatMessages —— 空状态与骨架屏', () => {
+  it('初次加载且无消息时显示骨架屏（不显示空状态）', () => {
+    renderMessages([], { loading: true });
+    expect(screen.getByTestId('messages-skeleton')).toBeInTheDocument();
+    expect(screen.queryByTestId('messages-empty')).toBeNull();
+  });
+
+  it('非加载且无消息时显示空状态提示', () => {
+    renderMessages([], { loading: false });
+    expect(screen.getByTestId('messages-empty')).toBeInTheDocument();
+    expect(screen.getByText('还没有消息，开始聊天吧')).toBeInTheDocument();
+    expect(screen.queryByTestId('messages-skeleton')).toBeNull();
+  });
+
+  it('有消息时不显示骨架屏也不显示空状态', () => {
+    renderMessages([msg({ id: 'a1', senderId: 'other', content: '在吗' })]);
+    expect(screen.queryByTestId('messages-skeleton')).toBeNull();
+    expect(screen.queryByTestId('messages-empty')).toBeNull();
+    expect(screen.getByText('在吗')).toBeInTheDocument();
+  });
+});

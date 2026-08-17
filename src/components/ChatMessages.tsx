@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import { Loading } from 'tdesign-react';
 import { ChatMarkdown } from '@tdesign-react/chat';
-import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, CheckCheck, MoreVertical, File as FileIcon, Pencil, Star, MapPin, Link2, Video, IdCard } from 'lucide-react';
+import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, MessageCircle, Smile, Check, CheckCheck, MoreVertical, File as FileIcon, Pencil, Star, MapPin, Link2, Video, IdCard } from 'lucide-react';
 import { ConvMessage, Contact, PermissionRequest } from '../types';
 import { ToolCallsCollapse } from './ToolCallsCollapse';
 import { InlinePermissionCard } from './InlinePermissionCard';
@@ -359,7 +359,7 @@ function Reactions({ msg, meId, onToggle }: { msg: ConvMessage; meId: string; on
 function MessageSkeleton() {
   const rows = [false, true, false, false, true, false, true, false];
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div data-testid="messages-skeleton" className="flex flex-col gap-4 w-full">
       {rows.map((me, i) => (
         <div key={i} className={`flex gap-3 ${me ? 'flex-row-reverse' : ''}`}>
           <div className="w-9 h-9 rounded bg-[var(--td-bg-color-component)] animate-pulse flex-shrink-0" />
@@ -472,6 +472,11 @@ export function ChatMessages({
     <div className="flex flex-col gap-3 max-w-3xl mx-auto w-full" style={{ fontSize: 'calc(15px * var(--spark-font-scale, 1))' }} onClick={() => { setMenu(null); setReactionFor(null); }}>
       {loading && messages.length === 0 ? (
         <MessageSkeleton />
+      ) : messages.length === 0 ? (
+        <div data-testid="messages-empty" className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+          <MessageCircle size={40} className="opacity-50" style={{ color: 'var(--td-text-color-placeholder)' }} />
+          <div className="text-sm" style={{ color: 'var(--td-text-color-placeholder)' }}>还没有消息，开始聊天吧</div>
+        </div>
       ) : (
       messages.map((msg, i) => {
         const prev = i > 0 ? messages[i - 1] : null;

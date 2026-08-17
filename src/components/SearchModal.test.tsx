@@ -45,3 +45,23 @@ describe('SearchModal 搜索结果跳转', () => {
     expect(onSelect).toHaveBeenCalledWith('c-1', 'm-abc');
   });
 });
+
+describe('SearchModal —— 加载中指示', () => {
+  const realFetch = global.fetch;
+  beforeEach(() => {
+    global.fetch = vi.fn(async () => ({ json: async () => ({ results: [] }) })) as any;
+  });
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  it('输入关键词后加载中显示「搜索中…」', () => {
+    vi.useFakeTimers();
+    render(<SearchModal visible onClose={() => {}} onSelect={vi.fn()} />);
+    const input = screen.getByPlaceholderText('输入关键词，搜索全部会话的消息');
+    fireEvent.change(input, { target: { value: '代理' } });
+    expect(screen.getByTestId('search-loading')).toBeInTheDocument();
+    expect(screen.getByText('搜索中…')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+});
