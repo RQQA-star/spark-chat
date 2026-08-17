@@ -63,6 +63,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
   // @ 成员提及
   const [showMention, setShowMention] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionActive, setMentionActive] = useState(0);
   const mentionAnchor = useRef(-1);
 
   // 表情面板
@@ -109,6 +110,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
         setShowEmoji(false);
         setShowSticker(false);
         setShowPlus(false);
+        setShowMention(false);
       }
     };
     document.addEventListener('mousedown', onDown);
@@ -210,6 +212,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     if (match) {
       mentionAnchor.current = caret - match[2].length - 1;
       setMentionQuery(match[2]);
+      setMentionActive(0);
       setShowMention(true);
     } else {
       setShowMention(false);
@@ -219,6 +222,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
   const mentionAllOption: Contact = { id: 'all', name: '所有人', avatarText: '@', avatarColor: '#e34d59' } as Contact;
   const mentionBaseOptions = isGroup ? [mentionAllOption, ...candidateMembers] : candidateMembers;
   const filteredMembers = mentionBaseOptions.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()));
+  const activeMentionIdx = Math.min(mentionActive, Math.max(0, filteredMembers.length - 1));
 
   const selectMention = (name: string) => {
     const el = textareaRef.current;
@@ -344,11 +348,12 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             </button>
             {showEmoji && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-6 gap-1 z-20"
+                data-testid="emoji-popover"
+                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-6 gap-1 z-30"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
                 {EMOJIS.map((em, i) => (
-                  <button key={`emoji-${i}-${em}`} onClick={() => insertEmoji(em)} className="text-xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
+                  <button key={`emoji-${i}-${em}`} data-testid={`emoji-item-${i}`} onClick={() => insertEmoji(em)} className="text-xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
                     {em}
                   </button>
                 ))}
@@ -386,7 +391,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             </button>
             {showSticker && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-7 gap-1 z-20 max-h-56 overflow-y-auto"
+                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-7 gap-1 z-30 max-h-56 overflow-y-auto"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
                 {STICKERS.map((em, i) => (
@@ -410,7 +415,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             </button>
             {showPlus && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-44 rounded-xl shadow-lg p-1 z-20"
+                className="absolute bottom-full left-0 mb-2 w-44 rounded-xl shadow-lg p-1 z-30"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
                 <button onClick={() => setCardPicker(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>
@@ -473,15 +478,19 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             <div className="relative flex-1">
               {showMention && isGroup && filteredMembers.length > 0 && (
                 <div
-                  className="absolute bottom-full left-0 mb-2 w-56 max-h-52 overflow-y-auto rounded-xl shadow-lg p-1 z-20"
+                  data-testid="mention-popover"
+                  className="absolute bottom-full left-0 mb-2 w-56 max-h-52 overflow-y-auto rounded-xl shadow-lg p-1 z-30"
                   style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
                 >
                   <div className="px-2 py-1 text-[11px]" style={{ color: 'var(--td-text-color-placeholder)' }}>选择要 @ 的成员</div>
-                  {filteredMembers.map(m => (
+                  {filteredMembers.map((m, idx) => (
                     <div
                       key={m.id}
+                      data-testid={`mention-item-${m.id}`}
                       onClick={() => selectMention(m.name)}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]"
+                      onMouseEnter={() => setMentionActive(idx)}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
+                      style={{ backgroundColor: idx === activeMentionIdx ? 'var(--td-bg-color-component-hover)' : 'transparent' }}
                     >
                       <div className="w-6 h-6 rounded flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: m.avatarColor || '#0052d9' }}>
                         {m.avatarText || m.name.slice(0, 1)}
@@ -496,6 +505,11 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
                 value={text}
                 onChange={handleChange}
                 onKeyDown={e => {
+                  if (showMention && isGroup && filteredMembers.length > 0) {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setMentionActive(i => (i + 1) % filteredMembers.length); return; }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setMentionActive(i => (i - 1 + filteredMembers.length) % filteredMembers.length); return; }
+                    if (e.key === 'Enter') { e.preventDefault(); const m = filteredMembers[activeMentionIdx]; if (m) selectMention(m.name); return; }
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
                 }}
                 rows={1}
