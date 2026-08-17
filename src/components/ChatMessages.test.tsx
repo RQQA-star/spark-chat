@@ -187,4 +187,11 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(block.style.borderRadius).toBe('6px');
     expect(block.style.borderLeftWidth).toBe('2px');
   });
+
+  it('消息行头像采用微信式圆形（rounded-full）', () => {
+    renderMessages([msg({ id: 'a1', senderId: 'other', content: 'hi' })]);
+    const avatar = screen.getByTestId('msg-avatar');
+    expect(avatar.className).toContain('rounded-full');
+    expect(avatar.className).not.toContain('rounded-lg');
+  });
 });

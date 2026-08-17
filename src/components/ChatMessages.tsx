@@ -313,7 +313,7 @@ function CardBubble({ msg, isMe, onPreviewContact, radius }: { msg: ConvMessage;
       style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)', borderRadius: radius || '8px' }}
       onClick={() => onPreviewContact?.(card.cardId)}
     >
-      <div className="w-11 h-11 rounded-lg flex items-center justify-center font-semibold text-white flex-shrink-0" style={{ backgroundColor: card.cardAvatarColor || '#888', fontSize: 16 }}>
+      <div className="w-11 h-11 rounded-full flex items-center justify-center font-semibold text-white flex-shrink-0" style={{ backgroundColor: card.cardAvatarColor || '#888', fontSize: 16 }}>
         {card.cardIsAgent ? <Bot size={18} /> : (card.cardAvatarText || card.cardName.slice(0, 1))}
       </div>
       <div className="min-w-0 flex-1">
@@ -362,7 +362,7 @@ function MessageSkeleton() {
     <div className="flex flex-col gap-4 w-full">
       {rows.map((me, i) => (
         <div key={i} className={`flex gap-3 ${me ? 'flex-row-reverse' : ''}`}>
-          <div className="w-9 h-9 rounded-lg bg-[var(--td-bg-color-component)] animate-pulse flex-shrink-0" />
+          <div className="w-9 h-9 rounded-full bg-[var(--td-bg-color-component)] animate-pulse flex-shrink-0" />
           <div className={`flex flex-col gap-1.5 max-w-[70%] ${me ? 'items-end' : 'items-start'}`}>
             <div
               className="h-10 rounded-[14px] bg-[var(--td-bg-color-component)] animate-pulse"
@@ -574,7 +574,8 @@ export function ChatMessages({
                 </button>
               ) : (
                 <div
-                  className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white cursor-pointer"
+                  data-testid="msg-avatar"
+                  className="w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center font-semibold text-white cursor-pointer"
                   style={{ backgroundColor: avatarColor, fontSize: 14 }}
                   title="双击拍一拍"
                   onClick={() => { if (!isMe && onPreviewContact) onPreviewContact(msg.senderId); }}
