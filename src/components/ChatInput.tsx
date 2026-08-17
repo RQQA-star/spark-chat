@@ -429,7 +429,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
                   <div className="mt-1 max-h-52 overflow-y-auto rounded-lg border p-1" style={{ borderColor: 'var(--td-component-stroke)' }}>
                     {contacts.filter(c => c.id !== meId).map(c => (
                       <button key={c.id} onClick={() => pickCard(c.id)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--td-bg-color-component-hover)]">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: c.avatarColor || '#0052d9' }}>
+                        <div className="w-6 h-6 rounded flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: c.avatarColor || '#0052d9' }}>
                           {c.avatarText || c.name.slice(0, 1)}
                         </div>
                         <span className="text-sm truncate" style={{ color: 'var(--td-text-color-primary)' }}>{c.name}</span>
@@ -483,7 +483,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
                       onClick={() => selectMention(m.name)}
                       className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)]"
                     >
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: m.avatarColor || '#0052d9' }}>
+                      <div className="w-6 h-6 rounded flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: m.avatarColor || '#0052d9' }}>
                         {m.avatarText || m.name.slice(0, 1)}
                       </div>
                       <span className="text-sm" style={{ color: 'var(--td-text-color-primary)' }}>{m.name}</span>

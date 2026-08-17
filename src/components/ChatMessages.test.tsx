@@ -188,11 +188,11 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(block.style.borderLeftWidth).toBe('2px');
   });
 
-  it('消息行头像采用微信式圆形（rounded-full）', () => {
+  it('消息行头像采用微信式圆角方形（rounded，非正圆）', () => {
     renderMessages([msg({ id: 'a1', senderId: 'other', content: 'hi' })]);
     const avatar = screen.getByTestId('msg-avatar');
-    expect(avatar.className).toContain('rounded-full');
-    expect(avatar.className).not.toContain('rounded-lg');
+    expect(avatar.className).toContain('rounded');
+    expect(avatar.className).not.toContain('rounded-full');
   });
 
   it('群消息 @我 时显示红色「@我」红标（与 @所有人 同款红胶囊）', () => {

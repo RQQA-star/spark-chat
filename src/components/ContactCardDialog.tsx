@@ -16,7 +16,7 @@ interface ContactCardDialogProps {
 function CardAvatar({ text, color, size = 72 }: { text?: string | null; color?: string | null; size?: number }) {
   return (
     <div
-      className="flex-shrink-0 rounded-full flex items-center justify-center font-semibold text-white"
+      className="flex-shrink-0 rounded flex items-center justify-center font-semibold text-white"
       style={{ width: size, height: size, backgroundColor: color || '#888', fontSize: size * 0.38 }}
     >
       {text || '?'}

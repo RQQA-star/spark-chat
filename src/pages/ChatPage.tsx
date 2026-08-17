@@ -75,7 +75,7 @@ interface ChatPageProps {
 
 function Avatar({ text, color, size = 28 }: { text?: string | null; color?: string | null; size?: number }) {
   return (
-    <div className="rounded-full flex items-center justify-center text-white font-semibold" style={{ width: size, height: size, backgroundColor: color || '#888', fontSize: size * 0.4 }}>
+    <div className="rounded flex items-center justify-center text-white font-semibold" style={{ width: size, height: size, backgroundColor: color || '#888', fontSize: size * 0.4 }}>
       {text || '?'}
     </div>
   );
