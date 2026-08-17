@@ -597,7 +597,7 @@ export function ChatMessages({
                 )}
 
                 {msg.meta?.mentions?.includes('all') && isGroup && (
-                  <span className="text-[11px] flex items-center gap-1" style={{ color: '#e34d59' }}>
+                  <span data-testid="at-all-badge" className="text-[11px] px-1.5 py-0.5 rounded inline-flex items-center gap-1" style={{ color: '#fff', backgroundColor: '#e34d59' }}>
                     @ 所有人
                   </span>
                 )}
@@ -727,7 +727,7 @@ export function ChatMessages({
 
                 {/* 时间 / 状态 / reaction */}
                 <div className="flex items-center gap-1 flex-wrap">
-                  <span className="text-[11px] px-1" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtClock(msg.createdAt)}</span>
+                  <span data-testid="msg-clock" className="text-[11px]" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtClock(msg.createdAt)}</span>
                   {isMe && (msg.msgType === 'text' || msg.msgType === 'voice' || msg.msgType === 'image' || msg.msgType === 'file') && (
                     msg.status === 'sending' ? (
                       <span className="text-[11px] px-1 inline-flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}>
@@ -749,7 +749,7 @@ export function ChatMessages({
                     )
                   )}
                   {msg.meta?.mentions?.includes(meId) && (
-                    <span className="text-[11px] px-1 rounded" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
+                    <span data-testid="at-me-badge" className="text-[11px] px-1.5 py-0.5 rounded" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
                   )}
                 </div>
 

@@ -194,4 +194,26 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(avatar.className).toContain('rounded-full');
     expect(avatar.className).not.toContain('rounded-lg');
   });
+
+  it('群消息 @我 时显示红色「@我」红标（与 @所有人 同款红胶囊）', () => {
+    renderMessages([msg({ id: 'm1', senderId: 'other', content: 'hi', meta: { mentions: ['me'] } })], { isGroup: true });
+    const badge = screen.getByTestId('at-me-badge');
+    expect(badge).toHaveTextContent('@我');
+    expect(badge.style.backgroundColor).toBe('rgb(227, 77, 89)');
+    expect(badge.style.color).toBe('rgb(255, 255, 255)');
+    expect(badge.className).toContain('rounded');
+  });
+
+  it('群消息 @所有人 时显示红色「@ 所有人」胶囊', () => {
+    renderMessages([msg({ id: 'm2', senderId: 'other', content: 'hi', meta: { mentions: ['all'] } })], { isGroup: true });
+    const badge = screen.getByTestId('at-all-badge');
+    expect(badge).toHaveTextContent('@ 所有人');
+    expect(badge.style.backgroundColor).toBe('rgb(227, 77, 89)');
+  });
+
+  it('时间戳与气泡边缘齐平（不再额外缩进）', () => {
+    renderMessages([msg({ id: 't1', senderId: 'other', content: 'hi' })]);
+    const clock = screen.getByTestId('msg-clock');
+    expect(clock.className).not.toContain('px-1');
+  });
 });
