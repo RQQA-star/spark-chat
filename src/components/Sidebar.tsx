@@ -99,6 +99,8 @@ export function Sidebar({
   const filteredConvs = q
     ? conversations.filter(c => (c.title || '').toLowerCase().includes(q) || (c.lastMessage?.content || '').toLowerCase().includes(q))
     : conversations;
+  // 置顶会话排在最前（稳定排序，保持其余相对顺序）
+  const sortedConvs = [...filteredConvs].sort((a, b) => Number(b.pinned) - Number(a.pinned));
   const meId = contacts.find(c => c.id === 'me')?.id || 'me';
 
   const fmtTime = (iso?: string) => {
@@ -171,7 +173,7 @@ export function Sidebar({
               <div className="text-center text-sm mt-10" style={{ color: 'var(--td-text-color-placeholder)' }}>
                 {q ? '没有匹配的会话' : '还没有会话，去通讯录找个朋友聊聊吧'}
               </div>
-            ) : filteredConvs.map(conv => (
+            ) : sortedConvs.map(conv => (
               <div
                 key={conv.id}
                 onClick={() => onSelectConversation(conv.id)}
@@ -184,7 +186,7 @@ export function Sidebar({
               >
                 <div className="relative flex-shrink-0">
                   <Avatar text={conv.avatarText} color={conv.avatarColor} />
-                  {conv.unreadCount ? (
+                  {conv.unreadCount && !conv.muted ? (
                     <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full text-white text-[11px] font-medium" style={{ backgroundColor: '#fa5151' }}>
                       {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
                     </span>

@@ -58,4 +58,36 @@ describe('Sidebar —— 草稿前缀', () => {
     expect(screen.queryByText('[草稿]')).toBeNull();
     expect(screen.getByText(/我的消息/)).toBeInTheDocument();
   });
+
+  it('置顶会话排在列表最前', () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        conversations={[
+          conv({ id: 'a', title: '会话甲', pinned: false }),
+          conv({ id: 'b', title: '会话乙', pinned: true }),
+        ]}
+      />,
+    );
+    const yi = screen.getByText('会话乙');
+    const jia = screen.getByText('会话甲');
+    // 会话乙（置顶）应出现在 会话甲 之前
+    expect(yi.compareDocumentPosition(jia) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('免打扰会话不显示红色未读角标（仅普通会话显示）', () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        conversations={[
+          conv({ id: 'm', title: '免打扰会话', muted: true, unreadCount: 7 }),
+          conv({ id: 'n', title: '普通会话', muted: false, unreadCount: 12 }),
+        ]}
+      />,
+    );
+    // 免打扰会话的未读数 7 不应以红色角标出现
+    expect(screen.queryByText('7')).toBeNull();
+    // 普通会话的未读数 12 仍显示
+    expect(screen.getByText('12')).toBeInTheDocument();
+  });
 });
