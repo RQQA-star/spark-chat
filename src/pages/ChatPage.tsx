@@ -93,6 +93,43 @@ export function ChatPage({
     }
   }, [hasMoreMessages, loadOlderMessages]);
 
+  // 文件拖拽 / 粘贴图片发送（微信式：直接把图片拖进聊天区或 Ctrl+V 发送）
+  const [dragging, setDragging] = useState(false);
+  const fileToBase64 = (f: File) => new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve((r.result as string).split(',')[1] || '');
+    r.onerror = reject;
+    r.readAsDataURL(f);
+  });
+  const handleFiles = async (files: File[]) => {
+    for (const f of files) {
+      const ext = f.name.split('.').pop() || '';
+      const b64 = await fileToBase64(f);
+      if (f.type.startsWith('image/')) onSendImage?.(b64, ext);
+      else if (f.type.startsWith('video/')) onSendVideo?.(b64, ext);
+      else onSendFile?.(b64, ext, f.name);
+    }
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) handleFiles(files);
+  };
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imgs = Array.from(items)
+        .filter(i => i.type.startsWith('image/'))
+        .map(i => i.getAsFile())
+        .filter(Boolean) as File[];
+      if (imgs.length) { e.preventDefault(); handleFiles(imgs); }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
+
   // prepend 历史消息后，把滚动位置补偿回原处（避免跳到顶部）
   useLayoutEffect(() => {
     if (prependingRef.current && scrollRef.current) {
@@ -229,7 +266,20 @@ export function ChatPage({
       )}
 
       {/* 消息区 */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-6" style={{ backgroundColor: 'var(--spark-chat-bg, var(--td-bg-color-page))' }}>
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
+        onDrop={handleDrop}
+        className="relative flex-1 overflow-y-auto px-4 py-6"
+        style={{ backgroundColor: 'var(--spark-chat-bg, var(--td-bg-color-page))' }}
+      >
+        {dragging && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ backgroundColor: 'rgba(7,193,96,0.12)', border: '2px dashed #07c160' }}>
+            <span className="px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: '#07c160', color: '#fff' }}>松手即可发送</span>
+          </div>
+        )}
         <div className="flex justify-center py-2 h-8">
           {isLoadingOlder ? (
             <span className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--td-text-color-placeholder)' }}><Loading size="small" /> 加载更早消息…</span>
