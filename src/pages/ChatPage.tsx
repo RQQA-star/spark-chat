@@ -54,6 +54,10 @@ interface ChatPageProps {
   remoteAssistActive?: boolean;
   /** 发起视频通话（本地模拟） */
   onStartVideoCall?: () => void;
+  /** 搜索结果跳转：定位并高亮的消息 id */
+  focusMessageId?: string | null;
+  /** 跳转处理完成后复位（避免后续切回会话时重复定位） */
+  onClearFocusMessage?: () => void;
 }
 
 function Avatar({ text, color, size = 28 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -71,7 +75,7 @@ export function ChatPage({
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
   onPreviewImage, onPreviewContact, onFavorite,
   onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
-  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall,
+  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall, focusMessageId, onClearFocusMessage,
 }: ChatPageProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -320,6 +324,10 @@ export function ChatPage({
             onPreviewContact={onPreviewContact}
             onFavorite={onFavorite}
             loading={loading}
+            focusMessageId={focusMessageId}
+            onFocusHandled={onClearFocusMessage}
+            onLoadOlderMessages={loadOlderMessages}
+            hasMoreMessages={hasMoreMessages}
             onReply={(id) => setReplyTo(messages.find(m => m.id === id) || null)}
           />
         ) : (

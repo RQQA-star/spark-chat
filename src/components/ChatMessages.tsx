@@ -36,6 +36,12 @@ interface ChatMessagesProps {
   onEnterMultiSelect?: (id: string) => void;
   // 初次加载当前会话消息时显示骨架屏（仅当列表为空时生效）
   loading?: boolean;
+  // 搜索结果跳转：定位并高亮某条消息（来自 SearchModal 的 onSelect）
+  focusMessageId?: string | null;
+  onFocusHandled?: () => void;
+  // 命中消息尚在更早历史时，尝试向上加载更多再定位
+  onLoadOlderMessages?: () => Promise<void>;
+  hasMoreMessages?: boolean;
 }
 
 function fmtClock(iso: string) {
@@ -355,6 +361,7 @@ function MessageSkeleton() {
 export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,
   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, scrollRef,
+  focusMessageId, onFocusHandled, onLoadOlderMessages, hasMoreMessages,
   onPreviewImage, onPreviewContact, onFavorite,
   multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
   loading = false,
@@ -365,8 +372,12 @@ export function ChatMessages({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const longPressRef = useRef<number | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const focusAttemptRef = useRef(0);
 
   useEffect(() => {
+    // 搜索跳转定位期间不强制粘底，避免与跳转滚动打架
+    if (focusMessageId) return;
     const container = scrollRef?.current;
     if (container) {
       const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
@@ -374,7 +385,28 @@ export function ChatMessages({
     } else {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, messagesEndRef, scrollRef]);
+  }, [messages, messagesEndRef, scrollRef, focusMessageId]);
+
+  // 搜索结果跳转：滚动到命中消息并短暂高亮；若消息尚在更早历史则分批向上加载更多再定位（上限 8 批）
+  useEffect(() => {
+    if (!focusMessageId) { focusAttemptRef.current = 0; return; }
+    const el = typeof document !== 'undefined' ? document.getElementById(`msg-${focusMessageId}`) : null;
+    if (el) {
+      el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      setHighlightId(focusMessageId);
+      focusAttemptRef.current = 0;
+      onFocusHandled?.();
+      const t = window.setTimeout(() => setHighlightId(null), 1600);
+      return () => window.clearTimeout(t);
+    }
+    if (hasMoreMessages && onLoadOlderMessages && focusAttemptRef.current < 8) {
+      focusAttemptRef.current += 1;
+      onLoadOlderMessages();
+      return;
+    }
+    // 已无更早消息或尝试达上限仍找不到，放弃定位并复位
+    onFocusHandled?.();
+  }, [focusMessageId, messages, hasMoreMessages, onLoadOlderMessages, onFocusHandled]);
 
   const canRecall = (msg: ConvMessage) => {
     if (msg.senderId !== meId || msg.recalled) return false;
@@ -482,7 +514,7 @@ export function ChatMessages({
             {divider}
             <div
               id={`msg-${msg.id}`}
-              className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''} ${selected ? 'rounded-xl px-1' : ''}`}
+              className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''} ${selected ? 'rounded-xl px-1' : ''} ${highlightId === msg.id ? 'msg-flash' : ''}`}
               style={selected ? { backgroundColor: 'rgba(7,193,96,0.12)' } : undefined}
               onContextMenu={(e) => openMenu(e, msg.id)}
               onTouchStart={() => { longPressRef.current = window.setTimeout(() => openMenu({ clientX: 0, clientY: 0 } as any, msg.id), 500); }}

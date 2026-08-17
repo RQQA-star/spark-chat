@@ -437,6 +437,17 @@ t-chat-sender::part(send-btn):disabled,
   color: var(--td-text-color-secondary);
 }
 
+/* 搜索结果跳转：命中消息短暂高亮（微信风琥珀色闪一下） */
+@keyframes msgFlash {
+  0% { background-color: rgba(250, 173, 20, 0); }
+  18% { background-color: rgba(250, 173, 20, 0.38); }
+  100% { background-color: rgba(250, 173, 20, 0); }
+}
+.msg-flash {
+  animation: msgFlash 1.6s ease-out;
+  border-radius: 12px;
+}
+
 .chat-markdown table {
   border-collapse: collapse;
   width: 100%;

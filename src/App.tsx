@@ -42,6 +42,7 @@ export default function App() {
   const [remoteAssist, setRemoteAssist] = useState(false);
   const [settings, setSettings] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [focusMsg, setFocusMsg] = useState<{ id: string; nonce: number } | null>(null);
   // 待转发的内容：可能是单条消息，也可能是多选合并后的「聊天记录」
   const [pendingForward, setPendingForward] = useState<{ message?: ConvMessage; merged?: { title: string; content: string } } | null>(null);
   const [agentConfigOpen, setAgentConfigOpen] = useState(false);
@@ -140,10 +141,13 @@ export default function App() {
     openConversation(conv.id);
   }, [createConversation, openConversation]);
 
-  const handleSearchSelect = useCallback((conversationId: string) => {
+  const handleSearchSelect = useCallback((conversationId: string, messageId: string) => {
     setSearchOpen(false);
+    setFocusMsg({ id: messageId, nonce: Date.now() });
     openConversation(conversationId);
   }, [openConversation]);
+
+  const clearFocus = useCallback(() => setFocusMsg(null), []);
 
   const previewOf = (m: ConvMessage): string => {
     if (m.recalled) return '撤回了一条消息';
@@ -332,6 +336,8 @@ export default function App() {
             onOpenAgentConfig={() => setAgentConfigOpen(true)}
             remoteAssistActive={remoteAssistActive}
             onStartVideoCall={handleStartVideoCall}
+            focusMessageId={focusMsg?.id ?? null}
+            onClearFocusMessage={clearFocus}
           />
         ) : (
           <Welcome

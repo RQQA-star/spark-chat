@@ -17,7 +17,7 @@ interface SearchResultItem {
 interface SearchModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelect: (conversationId: string) => void;
+  onSelect: (conversationId: string, messageId: string) => void;
 }
 
 function highlight(text: string, kw: string) {
@@ -85,7 +85,7 @@ export function SearchModal({ visible, onClose, onSelect }: SearchModalProps) {
         {results.map(r => (
           <div
             key={r.id}
-            onClick={() => onSelect(r.conversationId)}
+            onClick={() => onSelect(r.conversationId, r.id)}
             className="flex flex-col gap-0.5 px-2 py-2.5 rounded-lg cursor-pointer hover:bg-[var(--td-bg-color-component-hover)] border-b"
             style={{ borderColor: 'var(--td-component-stroke)' }}
           >
