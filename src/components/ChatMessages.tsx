@@ -55,11 +55,14 @@ function fmtClock(iso: string) {
 function fmtDate(iso: string) {
   const d = new Date(iso);
   const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-  if (same(d, now)) return '今天';
+  if (same(d, now)) return time;
   const y = new Date(now); y.setDate(now.getDate() - 1);
-  if (same(d, y)) return '昨天';
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  if (same(d, y)) return `昨天 ${time}`;
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`;
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 }
 function isSameDay(a: string, b: string) {
   return new Date(a).toDateString() === new Date(b).toDateString();
@@ -461,9 +464,11 @@ export function ChatMessages({
       ) : (
       messages.map((msg, i) => {
         const prev = i > 0 ? messages[i - 1] : null;
-        const showDivider = !prev || !isSameDay(prev.createdAt, msg.createdAt);
+        // 微信式时间分割：首条 / 跨天 / 与上一条间隔超 5 分钟 时显示时间戳
+        const gapMs = prev ? new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() : Infinity;
+        const showDivider = !prev || !isSameDay(prev.createdAt, msg.createdAt) || gapMs > 5 * 60 * 1000;
         const divider = showDivider ? (
-          <div key={`d-${msg.id}`} className="flex justify-center my-1">
+          <div key={`d-${msg.id}`} data-testid="time-divider" className="flex justify-center my-1">
             <span className="text-[11px] px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
               {fmtDate(msg.createdAt)}
             </span>

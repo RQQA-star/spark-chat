@@ -118,4 +118,29 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(screen.getByText('你 撤回了一条消息')).toBeInTheDocument();
     expect(screen.queryByText('重新编辑')).toBeNull();
   });
+
+  it('同天相邻消息间隔 <5 分钟仅首条显示时间戳', () => {
+    const now = Date.now();
+    const a = new Date(now - 60 * 1000).toISOString();   // 1 分钟前
+    const b = new Date(now).toISOString();               // 现在
+    renderMessages([msg({ id: 't1', createdAt: a }), msg({ id: 't2', createdAt: b })]);
+    expect(screen.getAllByTestId('time-divider')).toHaveLength(1);
+  });
+
+  it('同天相邻消息间隔 >5 分钟显示两条时间戳', () => {
+    const now = Date.now();
+    const a = new Date(now - 10 * 60 * 1000).toISOString(); // 10 分钟前
+    const b = new Date(now).toISOString();
+    renderMessages([msg({ id: 't1', createdAt: a }), msg({ id: 't2', createdAt: b })]);
+    expect(screen.getAllByTestId('time-divider')).toHaveLength(2);
+  });
+
+  it('同天时间戳显示具体时分（非「今天」）', () => {
+    const fixed = new Date();
+    fixed.setHours(14, 32, 0, 0);
+    renderMessages([msg({ id: 't1', createdAt: fixed.toISOString() })]);
+    const divider = screen.getAllByTestId('time-divider')[0];
+    expect(divider).toHaveTextContent('14:32');
+    expect(divider).not.toHaveTextContent('今天');
+  });
 });
