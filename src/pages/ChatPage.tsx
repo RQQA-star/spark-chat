@@ -63,6 +63,10 @@ interface ChatPageProps {
   focusMessageId?: string | null;
   /** 跳转处理完成后复位（避免后续切回会话时重复定位） */
   onClearFocusMessage?: () => void;
+  /** 当前会话草稿（切换会话时回填输入框） */
+  draft?: string;
+  /** 输入框文本变化回传，用于持久化草稿 */
+  onDraftChange?: (text: string) => void;
 }
 
 function Avatar({ text, color, size = 28 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -80,7 +84,8 @@ export function ChatPage({
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
   onPreviewImage, onPreviewContact, onFavorite, onPat, onReedit, reedit,
   onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
-  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall, focusMessageId, onClearFocusMessage,
+  typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall,   focusMessageId, onClearFocusMessage,
+  draft, onDraftChange,
 }: ChatPageProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -389,6 +394,8 @@ export function ChatPage({
         onSendLocation={onSendLocation}
         onSendCard={onSendCard}
         contacts={contacts}
+        draft={draft}
+        onDraftChange={onDraftChange}
       />
       <RemoteAssistSession visible={showRemoteSession} conversationId={conversation.id} onClose={() => setShowRemoteSession(false)} />
     </div>

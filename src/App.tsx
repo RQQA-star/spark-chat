@@ -45,6 +45,8 @@ export default function App() {
   const [focusMsg, setFocusMsg] = useState<{ id: string; nonce: number } | null>(null);
   // 撤回后「重新编辑」回填（text + nonce 触发 ChatInput 的 prefill effect）
   const [reeditMsg, setReeditMsg] = useState<{ text: string; nonce: number } | null>(null);
+  // 各会话未发送草稿（切换会话后回填输入框，并在会话列表显示「[草稿]」）
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   // 待转发的内容：可能是单条消息，也可能是多选合并后的「聊天记录」
   const [pendingForward, setPendingForward] = useState<{ message?: ConvMessage; merged?: { title: string; content: string } } | null>(null);
   const [agentConfigOpen, setAgentConfigOpen] = useState(false);
@@ -131,6 +133,19 @@ export default function App() {
   }, [sendPat]);
   const handleReedit = useCallback((content: string) => {
     setReeditMsg({ text: content, nonce: Date.now() });
+  }, []);
+  const handleDraftChange = useCallback((convId: string, text: string) => {
+    const t = text ?? '';
+    setDrafts((prev) => {
+      if (!t) {
+        if (!prev[convId]) return prev;
+        const next = { ...prev };
+        delete next[convId];
+        return next;
+      }
+      if (prev[convId] === t) return prev;
+      return { ...prev, [convId]: t };
+    });
   }, []);
 
   const handleSendAgentAssist = useCallback((text: string) => {
@@ -298,6 +313,7 @@ export default function App() {
         onOpenFavorites={openFavorites}
         onOpenRemoteAssist={() => setRemoteAssist(true)}
         activeView={view}
+        drafts={drafts}
       />
 
       <main className="flex-1 flex flex-col min-w-0 h-full">
@@ -341,6 +357,8 @@ export default function App() {
             onPat={handlePat}
             onReedit={handleReedit}
             onFavorite={handleFavorite}
+            draft={currentConversationId ? (drafts[currentConversationId] || '') : ''}
+            onDraftChange={(text) => handleDraftChange(currentConversationId || '', text)}
             onRetry={retryMessage}
             typingMembers={typingMembers}
             loadOlderMessages={loadOlderMessages}

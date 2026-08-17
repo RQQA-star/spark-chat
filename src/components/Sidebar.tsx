@@ -31,6 +31,8 @@ interface SidebarProps {
   onOpenFavorites?: () => void;
   onOpenRemoteAssist?: () => void;
   activeView?: 'chat' | 'moments';
+  /** 各会话未发送草稿（convId -> text） */
+  drafts?: Record<string, string>;
 }
 
 function Avatar({ text, color, size = 40 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -80,6 +82,7 @@ export function Sidebar({
   onSelectContact, onCreateGroup, onDeleteConversation, onAddContact, onDeleteContact, onEditContact, onOpenSettings, onOpenSearch, theme, onToggleTheme,
   onEnableNotifications, notifState = 'default', onTogglePin, onToggleMute,
   onToggleStar, onOpenContactCard, onMarkAllRead, onOpenFavorites, onOpenRemoteAssist, activeView,
+  drafts,
 }: SidebarProps) {
   const [tab, setTab] = useState<'chat' | 'contacts'>('chat');
   const [search, setSearch] = useState('');
@@ -197,10 +200,19 @@ export function Sidebar({
                     <span className="text-xs flex-shrink-0 ml-2" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtTime(conv.lastMessage?.createdAt)}</span>
                   </div>
                   <div className="truncate text-xs mt-0.5" style={{ color: 'var(--td-text-color-placeholder)' }}>
-                    {conv.lastMessage?.meta?.mentions?.includes('all') || conv.lastMessage?.meta?.mentions?.includes(meId) ? (
-                      <span className="text-[11px] px-1 rounded mr-1" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
-                    ) : null}
-                    {conv.lastMessage ? (conv.lastMessage.senderId === 'me' ? '我: ' : '') + conv.lastMessage.content : '暂无消息'}
+                    {drafts?.[conv.id] ? (
+                      <>
+                        <span className="mr-1" style={{ color: '#fa5151' }}>[草稿]</span>
+                        {drafts[conv.id]}
+                      </>
+                    ) : (
+                      <>
+                        {conv.lastMessage?.meta?.mentions?.includes('all') || conv.lastMessage?.meta?.mentions?.includes(meId) ? (
+                          <span className="text-[11px] px-1 rounded mr-1" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
+                        ) : null}
+                        {conv.lastMessage ? (conv.lastMessage.senderId === 'me' ? '我: ' : '') + conv.lastMessage.content : '暂无消息'}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-0.5 flex-shrink-0">

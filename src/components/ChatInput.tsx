@@ -34,6 +34,10 @@ interface ChatInputProps {
   contacts?: Contact[];
   /** 撤回后「重新编辑」回填（text + nonce 触发） */
   reedit?: { text: string; nonce: number } | null;
+  /** 当前会话的草稿文本（切换会话时回填输入框） */
+  draft?: string;
+  /** 输入框文本变化（含发送后清空）时回传，用于持久化草稿 */
+  onDraftChange?: (text: string) => void;
 }
 
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','🤔','😎','😭','😅','🙄','👍','👎','👏','🙏','💪','🎉','🔥','❤️','💔','✨','🌹','🌟','🍻','☕','🚀','💡','✅','❌'];
@@ -43,7 +47,7 @@ function fmtDur(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile, onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard, contacts = [], reedit }: ChatInputProps) {
+export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile, onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard, contacts = [], reedit, draft, onDraftChange }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -78,6 +82,13 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
   }, [reedit]);
+
+  // 草稿回填：切换会话时 draft 变化即把对应会话的未发送文本装回输入框
+  useEffect(() => {
+    if (draft != null && draft !== text) setText(draft);
+    // 故意仅依赖 draft：text 由本 effect 写入，且 draft 与 text 在同一渲染帧内保持一致
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
   const insertSticker = (e: string) => {
     onSendSticker?.(e);
     setShowSticker(false);
@@ -189,6 +200,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     const val = e.target.value;
     const caret = e.target.selectionStart ?? val.length;
     setText(val);
+    onDraftChange?.(val);
     // 输入框随内容自动增高（上限 128px，约 max-h-32），超过则内部滚动
     const el = e.target;
     el.style.height = 'auto';
@@ -217,6 +229,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     const insert = '@' + name + ' ';
     const newText = before + insert + after;
     setText(newText);
+    onDraftChange?.(newText);
     setShowMention(false);
     requestAnimationFrame(() => {
       el?.focus();
@@ -237,6 +250,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     const quote = replyTo ? { messageId: replyTo.id, senderName: replyTo.senderName, preview: replyTo.preview } : undefined;
     onSendText(t, collectMentions(t), quote);
     setText('');
+    onDraftChange?.('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setShowMention(false);
     setShowEmoji(false);
