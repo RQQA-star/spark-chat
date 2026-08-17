@@ -1,6 +1,6 @@
 # 星火聊天 (spark-chat)
 
-微信风格的即时聊天 Web 应用，内置「星火助手」(CodeBuddy Agent)，支持单聊 / 群聊 / 语音消息，并可发起**本机远程协助**让 AI 直接操作你的电脑。
+微信风格的即时聊天 Web 应用，内置「星火助手」(CodeBuddy Agent)，支持单聊 / 群聊 / 语音消息。其主线是**跨机远程协助（P2P AI 动手）**：A 的电脑遇到 AI / 配置问题，B 可直接用**自己的 AI** 远程对接、操作 A 的电脑去设置 AI / 改配置。微信风聊天只是壳，聊天的本质是「玩 AI」。
 
 ## 功能
 
@@ -9,9 +9,11 @@
 - **群管理**：添加 / 移除成员、修改群名称，变更经 WebSocket 实时广播到所有打开该群的客户端（跨端同步）。
 - **联系人管理**：搜索、添加、删除联系人。
 - **星火助手（Agent）**：对话走 CodeBuddy Agent SDK 流式响应，支持工具调用与权限确认卡片。
-- **远程协助**：
-  - *本机协助*：让 Agent 以 `bypassPermissions` 在本机执行命令 / 读写文件（演示级，立即可用）。
-  - *远程桌面*：WebRTC 屏幕共享 + 控制信令链路预埋（同房间号双标签页可自连验证；真正的跨机控制需在被控端运行原生协助进程）。
+- **跨机远程协助（AI 动手）**：微信风聊天是壳，远程协助才是主线。
+  - *跨机通道*：被控端（A）在会话点「发起远程协助」→ 后端建 session；A 的浏览器把控制端（B 的星火助手）下发的指令经本机原生助手（`ws://127.0.0.1:17890`）真实执行并回传。服务器中转，**无需 TURN/STUN 穿透**，B 的 AI 只要在同源会话即可远程操作 A 的电脑。
+  - *安全闸*：每条指令弹窗经 A 本人「允许 / 拒绝」；危险命令（`rm -rf` / `format` / `shutdown` / `sudo` / `dd` / 写系统目录等）默认自动拒绝；全部操作落服务端 SQLite 审计账本，进程重启仍可查。
+  - *本机协助*（演示级）：Agent 以 `bypassPermissions` 在本机执行命令 / 读写文件，立即可用但不跨机。
+  - *远程桌面*（架构预埋）：WebRTC 屏幕共享 + 控制信令链路，同房间号双标签页可自连验证；真·键鼠注入需被控端运行原生协助进程。
 - **工程细节**：深色 / 浅色主题、错误边界、未读红点、日期分隔、消息删除 / 清空。
 
 ## 运行
@@ -47,12 +49,14 @@ npm run dev:client   # vite                  -> http://localhost:5173
 ```
 spark-chat/
 ├─ server/            # Express 后端 + SQLite
-│  ├─ index.ts        # 路由：会话/消息/联系人/语音/Agent 流式/远程信令
-│  └─ db.ts           # better-sqlite3 数据层
+│  ├─ index.ts        # 路由：会话/消息/联系人/语音/Agent 流式/跨机远程协助
+│  ├─ remoteSession.ts# 远程协助 session 注册表 + action 中继 + 审计
+│  ├─ remoteAssistTools.ts # 星火助手 remote_action 工具（run_command/read_file/write_file）
+│  └─ db.ts           # better-sqlite3 数据层（含 remote_audit 表）
 ├─ src/
 │  ├─ pages/ChatPage.tsx
 │  ├─ components/     # Sidebar / ChatMessages / ChatInput / VoiceMessage
-│  │                  # GroupManagePanel / AddContactDialog / RemoteAssistPanel
+│  │                  # GroupManagePanel / AddContactDialog / RemoteAssistPanel / RemoteAssistSession
 │  │                  # InlinePermissionCard / ErrorBoundary ...
 │  ├─ hooks/          # useConversations / useMessages / useContacts / useVoice / useTheme
 │  └─ types.ts
@@ -61,7 +65,51 @@ spark-chat/
 
 ## 测试
 
-使用 vitest：`npm test`（71 测试，后端 57 + 前端 14）。后端在 `node` 环境、前端在 Vitest 内置 `jsdom` 环境。`server/index.ts` 导出 `startServer(port, host)` 供集成测试起临时端口 + 真实 `ws` 客户端。
+使用 vitest：`npm test`（当前 **117 测试**，12 文件；后端集成 + 前端 jsdom）。`server/index.ts` 导出 `startServer(port, host)` 供集成测试起临时端口 + 真实 `ws` 客户端。
+
+## 跨机远程协助（AI 动手）
+
+这是 spark-chat 的主线能力：**A 的电脑有问题，B 用自己的星火助手远程操作 A 的机器**。微信风聊天只是壳，远程协助通道才是产品本体。
+
+### 架构（服务器中转，无 TURN/STUN）
+
+```
+被控端 A                             服务器（中转）                      控制端 B（星火助手）
+─────────                          ────────────                       ──────────────────
+会话点「发起远程协助」  ─POST─▶  建 session（按 conversationId）
+起 native-assistant            │
+ :17890 已连           │
+轮询 GET /actions ─每1.2s─▶ 取 B 下发的指令（run_command/read_file/write_file）
+  │                              │
+  └─▶ 转发本机原生助手执行 ──┐     │
+       结果 POST /result ─────┘▶  唤醒挂起 promise（30s 超时）
+                                          │
+                           B 的 remote_action 工具 ◀── 结果回显给 B
+```
+
+B 的 AI 只要在**与 A 同一会话**里即可获得 `remote_action` 工具；工具仅在 A 已发起活跃 session 时挂载，无需任何 P2P 穿透。
+
+### 安全模型（被控端主导）
+
+- **确认闸**：每条指令弹窗经 A 本人「允许 / 拒绝」，绝不静默执行。
+- **危险命令自动拒绝**：命中 `rm -rf` / `format` / `shutdown` / `del /f` / `sudo` / `dd if=` / fork bomb，或 `write_file` 写向系统目录（`C:\Windows...`、`/etc`、`/usr` 等）时直接拒绝。
+- **服务端审计账本**：`remote_audit` 表记录 `start / request / result / close` 四类事件，含指令摘要（`write_file` 仅记路径+字节数，不落文件内容）；进程重启仍可查，被控端面板可拉 `GET /api/remote/session/:id/audit` 或 `GET /api/remote/audit?conversationId=` 查看。
+
+### 实操（两台机器）
+
+**被控端 A**
+1. `npm run dev` → 进入与 B 的会话 → 点顶部 **🛠 发起远程协助** → 弹窗内点「发起」。
+2. 被控机启动真正执行命令的原生助手：
+   ```bash
+   cd native-assistant && npm install && npm start   # 监听 ws://127.0.0.1:17890
+   ```
+   面板显示「原生助手已连接」即就绪。
+
+**控制端 B**
+1. 同一会话打开星火助手，对 AI 说「帮对方运行 ipconfig 念给我」「读一下对方 C:\Users\me\config.json」等。
+2. A 机器弹出**确认框** → 点「允许执行」→ 结果经服务器回传 B。
+
+> 命令延迟约一个轮询周期（1.2s），排障够用。真·跨机：把服务部署到可达机器（或 `docker pull` ② 推送的 GHCR 镜像自托管），A、B 各连同一服务，流程一致。
 
 ```bash
 npm test           # vitest run
@@ -157,7 +205,7 @@ docker run -d --name spark-chat -p 3000:3000 \
 ## 已知范围
 
 - **群聊多端同步已可用**：改名 / 加成员 / 移除成员经 WebSocket `conversation:update` 实时广播，多标签页 / 多设备打开同一群会即时刷新。
-- 远程桌面为**架构预埋 / 演示级**：单实例原型可验证 WebRTC 与控制信令链路，同房间号双标签页可自连；真正跨机控制需被控端运行原生协助进程注入输入。
+- 跨机远程协助（`remote_action`）**已可用**：被控端发起 + 启动本机 `native-assistant` 后，控制端星火助手即可在同会话远程跑命令 / 读写文件，操作经被控端确认闸 + 服务端审计账本留存。WebRTC 远程桌面仍属架构预埋 / 演示级，真·键鼠注入需被控端运行原生协助进程。
 - 本机远程协助的真·键鼠注入依赖本机 Windows 原生助手（`native-assistant/`，需 `@nut-tree-fork/nut-js` 等原生依赖）与 CodeBuddy CLI 对 SDK MCP Server 的支持——容器内不含原生依赖，`/api/native-assistant/status` 的 `running` 恒为 `false` 属预期。
 - Agent 凭证缺失时仅做降级提示，不会真正调用模型。
 - 语音转写依赖浏览器 Web Speech API（Chrome / Edge 中文支持最佳），不支持时静默降级为无转写。
