@@ -279,7 +279,7 @@ export default function App() {
         onOpenContactCard={handlePreviewContact}
         onMarkAllRead={markAllRead}
         onOpenFavorites={openFavorites}
-        onOpenMoments={() => setView('moments')}
+        onOpenRemoteAssist={() => setRemoteAssist(true)}
         activeView={view}
       />
 

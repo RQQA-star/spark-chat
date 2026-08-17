@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tooltip, Input, Dialog } from 'tdesign-react';
-import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin, Star, CheckCheck, Camera } from 'lucide-react';
+import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin, Star, CheckCheck, Monitor } from 'lucide-react';
 import { Contact, Conversation } from '../types';
 import { NotifState } from '../lib/notifications';
 import { AddContactDialog } from './AddContactDialog';
@@ -29,7 +29,7 @@ interface SidebarProps {
   onOpenContactCard?: (id: string) => void;
   onMarkAllRead?: () => void;
   onOpenFavorites?: () => void;
-  onOpenMoments?: () => void;
+  onOpenRemoteAssist?: () => void;
   activeView?: 'chat' | 'moments';
 }
 
@@ -79,7 +79,7 @@ export function Sidebar({
   conversations, contacts, currentConversationId, onSelectConversation,
   onSelectContact, onCreateGroup, onDeleteConversation, onAddContact, onDeleteContact, onEditContact, onOpenSettings, onOpenSearch, theme, onToggleTheme,
   onEnableNotifications, notifState = 'default', onTogglePin, onToggleMute,
-  onToggleStar, onOpenContactCard, onMarkAllRead, onOpenFavorites, onOpenMoments, activeView,
+  onToggleStar, onOpenContactCard, onMarkAllRead, onOpenFavorites, onOpenRemoteAssist, activeView,
 }: SidebarProps) {
   const [tab, setTab] = useState<'chat' | 'contacts'>('chat');
   const [search, setSearch] = useState('');
@@ -116,7 +116,6 @@ export function Sidebar({
         <div className="flex-1 flex flex-col items-center gap-1 mt-4">
           <RailNav icon={<MessageCircle size={20} />} label="聊天" active={(activeView === 'chat' || !activeView) && tab === 'chat'} onClick={() => setTab('chat')} />
           <RailNav icon={<Users size={20} />} label="通讯录" active={(activeView === 'chat' || !activeView) && tab === 'contacts'} onClick={() => setTab('contacts')} />
-          <RailNav icon={<Camera size={20} />} label="朋友圈" active={activeView === 'moments'} onClick={() => onOpenMoments?.()} />
         </div>
         <div className="flex flex-col items-center gap-1 mb-1">
           <RailIcon title="搜索聊天记录" onClick={onOpenSearch}><Search size={18} /></RailIcon>
@@ -250,6 +249,15 @@ export function Sidebar({
                     <div className="truncate text-sm font-medium" style={{ color: 'var(--td-text-color-primary)' }}>{c.name}</div>
                     <div className="truncate text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>AI 助手 · 可聊天 / 远程协助</div>
                   </div>
+                  <Tooltip content="让助手操作你的电脑（远程协助）">
+                    <button
+                      className="flex-shrink-0 p-1.5 rounded-md transition-colors hover:bg-[var(--td-bg-color-component-hover)]"
+                      onClick={e => { e.stopPropagation(); onOpenRemoteAssist?.(); }}
+                      style={{ color: '#e34d59' }}
+                    >
+                      <Monitor size={16} />
+                    </button>
+                  </Tooltip>
                   <Tooltip content="编辑助手资料">
                     <button
                       className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"

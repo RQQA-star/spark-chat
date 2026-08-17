@@ -11,7 +11,7 @@ interface ReplyInfo {
 }
 
 // 大表情（贴纸）候选集
-const STICKERS = ['😀','😁','😂','🤣','😊','😍','😘','🤔','😎','😭','😅','🙄','👍','👎','👏','🙏','💪','🎉','🔥','❤️','💔','✨','🌹','🌟','🍻','☕','🚀','💡','✅','💯','🤝','😴','🥳','😇','🤩','😏','🙈','💋','🌈','⚡'];
+const STICKERS = ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷','🦂','🐢','🐍','🦎'];
 
 interface ChatInputProps {
   onSendText: (text: string, mentions?: string[], quote?: { messageId: string; senderName: string; preview: string; msgType?: string }) => void;
@@ -259,7 +259,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
           {/* 表情 / 图片 */}
           <div className="relative flex-shrink-0">
             <button
-              onClick={() => setShowEmoji(v => !v)}
+              onClick={() => { setShowEmoji(v => !v); setShowSticker(false); setShowPlus(false); }}
               className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
               style={{ backgroundColor: 'var(--td-bg-color-component-hover)', color: 'var(--td-text-color-secondary)' }}
               title="表情"
@@ -271,8 +271,8 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
                 className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-6 gap-1 z-20"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
-                {EMOJIS.map(em => (
-                  <button key={em} onClick={() => insertEmoji(em)} className="text-xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
+                {EMOJIS.map((em, i) => (
+                  <button key={`emoji-${i}-${em}`} onClick={() => insertEmoji(em)} className="text-xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
                     {em}
                   </button>
                 ))}
@@ -313,8 +313,8 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
                 className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-7 gap-1 z-20 max-h-56 overflow-y-auto"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
-                {STICKERS.map(em => (
-                  <button key={em} onClick={() => insertSticker(em)} className="text-2xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
+                {STICKERS.map((em, i) => (
+                  <button key={`sticker-${i}-${em}`} onClick={() => insertSticker(em)} className="text-2xl leading-none p-1 rounded hover:bg-[var(--td-bg-color-component-hover)]">
                     {em}
                   </button>
                 ))}
