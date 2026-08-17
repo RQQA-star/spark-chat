@@ -135,15 +135,18 @@ export function buildRemoteAssistMcpServer(): SdkMcpServerResult {
 export function buildRemoteActionMcpServer(conversationId: string): SdkMcpServerResult {
   const remoteActionTool = tool(
     'remote_action',
-    '跨机远程协助：向对方（被控端）的电脑发送一条操作指令并取回执行结果。' +
-    '仅当该会话已发起远程协助且被控端在线时可用。用于帮对方配置 AI、修改设置、运行命令等。',
+    '跨机远程协助：在【对方（被控端）的电脑】上执行一条操作并取回结果——注意这是在操作对端机器，' +
+    '不是你自己的运行环境。仅当该会话已发起远程协助、且对方已在本机启动原生助手时可用。' +
+    '典型用途：帮对方配 AI（设置 npm registry / 改配置文件）、查看对方机器上的日志、跑诊断命令。' +
+    '对方会对每条指令弹窗确认；危险命令（rm -rf / format / shutdown / 写系统目录等）会被对方自动拒绝。' +
+    '若返回「没有活跃的远程协助 session」，说明对方尚未发起协助，请先让对方在会话里点「发起远程协助」。',
     {
       action: z.enum(['run_command', 'read_file', 'write_file']).describe(
-        '操作类型：run_command 运行命令 / read_file 读取文件 / write_file 写入文件',
+        '操作类型：run_command 在对方机器运行命令 / read_file 读取对方机器文件 / write_file 写入对方机器文件',
       ),
-      command: z.string().optional().describe('run_command 时的命令（含参数），如 "npm config set registry https://x"'),
-      path: z.string().optional().describe('read_file / write_file 时的文件绝对路径'),
-      content: z.string().optional().describe('write_file 时写入的文件内容'),
+      command: z.string().optional().describe('run_command 时的完整命令（含参数），例如 "ipconfig /all" 或 "npm config get registry"'),
+      path: z.string().optional().describe('read_file / write_file 时的文件绝对路径，例如 "C:\\Users\\me\\.npmrc" 或 "/home/me/.bashrc"'),
+      content: z.string().optional().describe('write_file 时写入对方机器的完整文件内容（字符串）'),
     },
     async (args: { action: string; command?: string; path?: string; content?: string }): Promise<CallToolResult> => {
       const sessionId = getSessionIdByConversation(conversationId);
