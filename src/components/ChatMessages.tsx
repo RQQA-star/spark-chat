@@ -6,6 +6,7 @@ import { ConvMessage, Contact, PermissionRequest } from '../types';
 import { ToolCallsCollapse } from './ToolCallsCollapse';
 import { InlinePermissionCard } from './InlinePermissionCard';
 import { VoiceMessage } from './VoiceMessage';
+import { PopupMenu, type PopupMenuItem } from './PopupMenu';
 
 interface ChatMessagesProps {
   messages: ConvMessage[];
@@ -800,19 +801,18 @@ export function ChatMessages({
       {menu && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
-          <div className="fixed z-50 min-w-[120px] rounded-xl shadow-xl py-1" style={{ top: menu.y, left: menu.x, backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}>
-            {menuItems(messages.find(m => m.id === menu.id)!).map((it, idx) => (
-              <button
-                key={idx}
-                onClick={it.onClick}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--td-bg-color-component-hover)]"
-                style={{ color: it.danger ? '#e34d59' : 'var(--td-text-color-primary)' }}
-              >
-                {it.icon}
-                {it.label}
-              </button>
-            ))}
-          </div>
+          <PopupMenu
+            testId="msg-menu"
+            className="fixed z-50"
+            style={{ top: menu.y, left: menu.x }}
+            items={menuItems(messages.find(m => m.id === menu.id)!).map((it) => ({
+              key: it.label,
+              label: it.label,
+              icon: it.icon,
+              danger: it.danger,
+              onClick: it.onClick,
+            }))}
+          />
         </>
       )}
     </div>

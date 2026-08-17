@@ -251,3 +251,14 @@ describe('ChatMessages —— 空状态与骨架屏', () => {
     expect(screen.getByText('在吗')).toBeInTheDocument();
   });
 });
+
+describe('ChatMessages —— 右键/长按菜单（PopupMenu 统一）', () => {
+  it('右键消息弹出统一操作菜单，点击「转发」触发 onForward', () => {
+    const onForward = vi.fn();
+    renderMessages([msg({ id: 'm1', content: '你好世界' })], { onForward });
+    fireEvent.contextMenu(screen.getByText('你好世界'));
+    expect(screen.getByTestId('msg-menu')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('转发'));
+    expect(onForward).toHaveBeenCalledWith('m1');
+  });
+});

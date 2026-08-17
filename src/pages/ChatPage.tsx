@@ -3,6 +3,7 @@ import { Button, Tooltip, Loading } from 'tdesign-react';
 import { ArrowLeft, MessageCircle, Megaphone, Video, MoreVertical } from 'lucide-react';
 import { Conversation, Contact, ConvMessage, PermissionRequest } from '../types';
 import { ChatMessages } from '../components/ChatMessages';
+import { PopupMenu, type PopupMenuItem } from '../components/PopupMenu';
 import { ChatInput } from '../components/ChatInput';
 import { RemoteAssistSession } from '../components/RemoteAssistSession';
 
@@ -250,30 +251,20 @@ export function ChatPage({
               <Tooltip content="更多">
                 <Button icon={<MoreVertical />} variant="text" data-testid="header-more-btn" onClick={() => setMenuOpen(o => !o)} />
               </Tooltip>
-              {menuOpen && (
-                <>
-                  {/* 点击空白关闭（无需 document 监听） */}
-                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                  <div
-                    className="absolute right-0 top-full mt-2 z-50 min-w-[160px] rounded-lg py-1 shadow-lg"
-                    style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
-                  >
-                    {conversation.type === 'group' && (
-                      <button key="manage" data-testid="menu-manage" onClick={() => { setMenuOpen(false); onManageGroup(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>群管理</button>
-                    )}
-                    <button key="clear" data-testid="menu-clear" onClick={() => { setMenuOpen(false); onClearMessages(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>清空聊天记录</button>
-                    {!isAgentConversation && (
-                      <button key="remote" data-testid="menu-remote" onClick={() => { setMenuOpen(false); setShowRemoteSession(true); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>发起远程协助</button>
-                    )}
-                    {isAgentConversation && (
-                      <button key="assist" data-testid="menu-assist" onClick={() => { setMenuOpen(false); onOpenRemoteAssist(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>远程协助</button>
-                    )}
-                    {isAgentConversation && (
-                      <button key="cfg" data-testid="menu-cfg" onClick={() => { setMenuOpen(false); onOpenAgentConfig(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>助手设置</button>
-                    )}
-                  </div>
-                </>
-              )}
+              {menuOpen && (() => {
+                const headerMenuItems: PopupMenuItem[] = [];
+                if (conversation.type === 'group') headerMenuItems.push({ key: 'manage', label: '群管理', testId: 'menu-manage', onClick: () => { setMenuOpen(false); onManageGroup(); } });
+                headerMenuItems.push({ key: 'clear', label: '清空聊天记录', testId: 'menu-clear', onClick: () => { setMenuOpen(false); onClearMessages(); } });
+                if (!isAgentConversation) headerMenuItems.push({ key: 'remote', label: '发起远程协助', testId: 'menu-remote', onClick: () => { setMenuOpen(false); setShowRemoteSession(true); } });
+                if (isAgentConversation) headerMenuItems.push({ key: 'assist', label: '远程协助', testId: 'menu-assist', onClick: () => { setMenuOpen(false); onOpenRemoteAssist(); } });
+                if (isAgentConversation) headerMenuItems.push({ key: 'cfg', label: '助手设置', testId: 'menu-cfg', onClick: () => { setMenuOpen(false); onOpenAgentConfig(); } });
+                return (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                    <PopupMenu items={headerMenuItems} className="absolute right-0 top-full mt-2 z-50" />
+                  </>
+                );
+              })()}
             </div>
           </>
         )}

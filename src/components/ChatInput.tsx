@@ -415,7 +415,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             </button>
             {showPlus && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-44 rounded-xl shadow-lg p-1 z-30"
+                className="absolute bottom-full left-0 mb-2 w-44 rounded-xl shadow-xl p-1 z-30"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
                 <button onClick={() => setCardPicker(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>
