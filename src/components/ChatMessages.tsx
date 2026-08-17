@@ -116,21 +116,26 @@ function previewOf(m: ConvMessage): string {
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😍', '🎉', '😢'];
 
+// 微信式气泡圆角：统一 8px 基础圆角 + 头像侧 2px 小尾巴，文本/媒体气泡一致对齐
+const BUBBLE_RADIUS_ME = '8px 8px 2px 8px';
+const BUBBLE_RADIUS_OTHER = '8px 8px 8px 2px';
+const bubbleRadius = (isMe: boolean) => (isMe ? BUBBLE_RADIUS_ME : BUBBLE_RADIUS_OTHER);
+
 // 图片气泡：加载失败时回退为占位块，避免「裂图」破坏对称布局
-function ImageBubble({ imagePath, onPreview }: { imagePath: string; onPreview?: (imagePath: string) => void }) {
+function ImageBubble({ imagePath, onPreview, radius }: { imagePath: string; onPreview?: (imagePath: string) => void; radius?: string }) {
   const [err, setErr] = useState(false);
   const [loaded, setLoaded] = useState(false);
   if (err) {
     return (
-      <div className="flex items-center justify-center w-[240px] h-[180px] rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+      <div className="flex items-center justify-center w-[240px] h-[180px]" style={{ borderRadius: radius || '8px', backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
         <span className="text-xs">图片加载失败</span>
       </div>
     );
   }
   return (
     <div
-      className="relative rounded-lg overflow-hidden cursor-pointer"
-      style={{ border: '1px solid var(--td-component-stroke)', maxWidth: 260 }}
+      className="relative overflow-hidden cursor-pointer"
+      style={{ border: '1px solid var(--td-component-stroke)', maxWidth: 260, borderRadius: radius || '8px' }}
       onClick={() => onPreview ? onPreview(imagePath) : window.open(`/api/image/${imagePath}`, '_blank')}
     >
       {!loaded && (
@@ -142,21 +147,22 @@ function ImageBubble({ imagePath, onPreview }: { imagePath: string; onPreview?: 
         loading="lazy"
         onLoad={() => setLoaded(true)}
         onError={() => setErr(true)}
-        className="block max-w-[260px] max-h-[320px] rounded-lg object-contain"
+        className="block max-w-[260px] max-h-[320px] object-contain"
+        style={{ borderRadius: radius || '8px' }}
       />
     </div>
   );
 }
 
 // 文件卡片
-function FileBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
+function FileBubble({ msg, isMe, radius }: { msg: ConvMessage; isMe: boolean; radius?: string }) {
   const ext = (msg.fileName || '').split('.').pop()?.toUpperCase() || 'FILE';
   return (
     <a
       href={`/api/file/${msg.filePath || msg.fileName}`}
       download={msg.fileName || 'file'}
-      className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[220px] max-w-[280px] no-underline"
-      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-component)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
+      className="flex items-center gap-3 px-3 py-2.5 min-w-[220px] max-w-[280px] no-underline"
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-component)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)', borderRadius: radius || '8px' }}
     >
       <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : '#0052d9', color: '#fff' }}>
         <FileIcon size={20} />
@@ -170,7 +176,7 @@ function FileBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
 }
 
 // 合并转发（聊天记录）卡片
-function MergedBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
+function MergedBubble({ msg, isMe, radius }: { msg: ConvMessage; isMe: boolean; radius?: string }) {
   let data: { title?: string; items?: { senderName: string; time: string; preview: string }[] } | null = null;
   try { data = JSON.parse(msg.content || '{}'); } catch { data = null; }
   const items = data?.items || [];
@@ -178,8 +184,8 @@ function MergedBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
   const shown = expanded ? items : items.slice(0, 4);
   return (
     <div
-      className="rounded-lg overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
-      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
+      className="overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)', borderRadius: radius || '8px' }}
       onClick={() => setExpanded(v => !v)}
     >
       <div className="px-3 py-2 font-medium text-sm border-b" style={{ borderColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : 'var(--td-component-stroke)' }}>
@@ -213,7 +219,7 @@ function StickerBubble({ content }: { content: string }) {
 }
 
 // 链接卡片
-function LinkBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
+function LinkBubble({ msg, isMe, radius }: { msg: ConvMessage; isMe: boolean; radius?: string }) {
   const link = msg.meta?.link;
   const url = link?.url || msg.content || '';
   let host = '';
@@ -223,8 +229,8 @@ function LinkBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[240px] max-w-[300px] no-underline"
-      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-component)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
+      className="flex items-center gap-3 px-3 py-2.5 min-w-[240px] max-w-[300px] no-underline"
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-component)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)', borderRadius: radius || '8px' }}
     >
       <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : '#0052d9', color: '#fff' }}>
         <Link2 size={20} />
@@ -238,11 +244,11 @@ function LinkBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
 }
 
 // 视频消息
-function VideoBubble({ videoPath }: { videoPath: string }) {
+function VideoBubble({ videoPath, radius }: { videoPath: string; radius?: string }) {
   const [err, setErr] = useState(false);
   if (err) {
     return (
-      <div className="flex items-center justify-center w-[240px] h-[160px] rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+      <div className="flex items-center justify-center w-[240px] h-[160px]" style={{ borderRadius: radius || '8px', backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
         <span className="text-xs">视频加载失败</span>
       </div>
     );
@@ -253,21 +259,22 @@ function VideoBubble({ videoPath }: { videoPath: string }) {
       controls
       preload="metadata"
       onError={() => setErr(true)}
-      className="max-w-[240px] max-h-[320px] rounded-lg bg-black"
+      className="max-w-[240px] max-h-[320px] bg-black"
+      style={{ borderRadius: radius || '8px' }}
     />
   );
 }
 
 // 位置消息
-function LocationBubble({ msg, isMe, onOpen }: { msg: ConvMessage; isMe: boolean; onOpen?: () => void }) {
+function LocationBubble({ msg, isMe, onOpen, radius }: { msg: ConvMessage; isMe: boolean; onOpen?: () => void; radius?: string }) {
   const loc = msg.meta?.location;
   const name = loc?.name || '位置';
   const address = loc?.address || (loc ? `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` : '');
   const mapsUrl = loc ? `https://uri.amap.com/marker?position=${loc.lng},${loc.lat}&name=${encodeURIComponent(name)}` : '';
   return (
     <div
-      className="rounded-lg overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
-      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
+      className="overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)', borderRadius: radius || '8px' }}
       onClick={onOpen}
     >
       <div
@@ -297,13 +304,13 @@ function LocationBubble({ msg, isMe, onOpen }: { msg: ConvMessage; isMe: boolean
 }
 
 // 名片消息（分享联系人）
-function CardBubble({ msg, isMe, onPreviewContact }: { msg: ConvMessage; isMe: boolean; onPreviewContact?: (id: string) => void }) {
+function CardBubble({ msg, isMe, onPreviewContact, radius }: { msg: ConvMessage; isMe: boolean; onPreviewContact?: (id: string) => void; radius?: string }) {
   const card = msg.meta?.card;
   if (!card) return null;
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[220px] max-w-[280px] cursor-pointer"
-      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
+      className="flex items-center gap-3 px-3 py-2.5 min-w-[220px] max-w-[280px] cursor-pointer"
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)', borderRadius: radius || '8px' }}
       onClick={() => onPreviewContact?.(card.cardId)}
     >
       <div className="w-11 h-11 rounded-lg flex items-center justify-center font-semibold text-white flex-shrink-0" style={{ backgroundColor: card.cardAvatarColor || '#888', fontSize: 16 }}>
@@ -462,7 +469,7 @@ export function ChatMessages({
   };
 
   return (
-    <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full" style={{ fontSize: 'calc(15px * var(--spark-font-scale, 1))' }} onClick={() => { setMenu(null); setReactionFor(null); }}>
+    <div className="flex flex-col gap-3 max-w-3xl mx-auto w-full" style={{ fontSize: 'calc(15px * var(--spark-font-scale, 1))' }} onClick={() => { setMenu(null); setReactionFor(null); }}>
       {loading && messages.length === 0 ? (
         <MessageSkeleton />
       ) : (
@@ -538,8 +545,8 @@ export function ChatMessages({
         const selected = multiSelect && selection.has(msg.id);
 
         const bubbleStyle = isMe
-          ? { backgroundColor: 'var(--spark-own-bubble-bg)', color: 'var(--spark-own-bubble-text)', borderRadius: '14px 14px 4px 14px', opacity: msg.status === 'failed' ? 0.6 : 1 }
-          : { backgroundColor: 'var(--td-bg-color-container)', color: 'var(--td-text-color-primary)', borderRadius: '14px 14px 14px 4px', opacity: msg.status === 'failed' ? 0.6 : 1 };
+          ? { backgroundColor: 'var(--spark-own-bubble-bg)', color: 'var(--spark-own-bubble-text)', borderRadius: BUBBLE_RADIUS_ME, opacity: msg.status === 'failed' ? 0.6 : 1 }
+          : { backgroundColor: 'var(--td-bg-color-container)', color: 'var(--td-text-color-primary)', borderRadius: BUBBLE_RADIUS_OTHER, opacity: msg.status === 'failed' ? 0.6 : 1 };
 
         const onBubbleClick = () => {
           if (multiSelect) { onToggleSelect(msg.id); return; }
@@ -631,7 +638,7 @@ export function ChatMessages({
                     )}
 
                     {msg.msgType === 'voice' && msg.audioPath && (
-                      <div className="relative px-1 py-1" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                      <div className="relative" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
                         {/* 收到的语音未播放时显示未读红点（微信式） */}
                         {msg.senderId !== meId && !playedVoice?.has(msg.id) && (
                           <span data-testid="voice-unread" className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#fa5151' }} />
@@ -644,19 +651,19 @@ export function ChatMessages({
 
                     {msg.msgType === 'image' && msg.imagePath && (
                       <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
-                        <ImageBubble imagePath={msg.imagePath} onPreview={onPreviewImage} />
+                        <ImageBubble imagePath={msg.imagePath} onPreview={onPreviewImage} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 
                     {msg.msgType === 'file' && (
                       <div onClick={onBubbleClick}>
-                        <FileBubble msg={msg} isMe={isMe} />
+                        <FileBubble msg={msg} isMe={isMe} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 
                     {msg.msgType === 'merged' && (
                       <div onClick={onBubbleClick}>
-                        <MergedBubble msg={msg} isMe={isMe} />
+                        <MergedBubble msg={msg} isMe={isMe} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 
@@ -668,25 +675,25 @@ export function ChatMessages({
 
                     {msg.msgType === 'link' && (
                       <div onClick={onBubbleClick}>
-                        <LinkBubble msg={msg} isMe={isMe} />
+                        <LinkBubble msg={msg} isMe={isMe} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 
                     {msg.msgType === 'video' && msg.videoPath && (
                       <div onClick={onBubbleClick}>
-                        <VideoBubble videoPath={msg.videoPath} />
+                        <VideoBubble videoPath={msg.videoPath} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 
                     {msg.msgType === 'location' && (
                       <div onClick={onBubbleClick}>
-                        <LocationBubble msg={msg} isMe={isMe} />
+                        <LocationBubble msg={msg} isMe={isMe} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 
                     {msg.msgType === 'card' && (
                       <div onClick={onBubbleClick}>
-                        <CardBubble msg={msg} isMe={isMe} onPreviewContact={onPreviewContact} />
+                        <CardBubble msg={msg} isMe={isMe} onPreviewContact={onPreviewContact} radius={bubbleRadius(isMe)} />
                       </div>
                     )}
 

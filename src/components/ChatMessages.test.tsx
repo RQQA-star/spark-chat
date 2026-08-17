@@ -158,4 +158,21 @@ describe('ChatMessages —— 渲染与交互', () => {
     renderMessages([msg({ id: 'v3', msgType: 'voice', senderId: 'other', audioPath: 'c.webm', duration: 3000 })], { playedVoice: new Set(['v3']) });
     expect(screen.queryByTestId('voice-unread')).toBeNull();
   });
+
+  it('气泡圆角统一为微信式（本人 8px 右下小尾 / 对方 8px 左下小尾）', () => {
+    renderMessages([
+      msg({ id: 'me1', senderId: meId, content: '我的消息' }),
+      msg({ id: 'o1', senderId: 'other', content: '对方消息' }),
+    ]);
+    const meBubble = screen.getByText('我的消息').closest('div')!;
+    const otherBubble = screen.getByText('对方消息').closest('div')!;
+    expect(meBubble.style.borderRadius).toBe('8px 8px 2px 8px');
+    expect(otherBubble.style.borderRadius).toBe('8px 8px 8px 2px');
+  });
+
+  it('媒体气泡（文件）同样采用微信式统一圆角', () => {
+    renderMessages([msg({ id: 'f1', msgType: 'file', senderId: 'other', fileName: 'a.pdf', filePath: 'a.pdf', fileSize: 1024 })]);
+    const fileLink = screen.getByText('a.pdf').closest('a')!;
+    expect(fileLink.style.borderRadius).toBe('8px 8px 8px 2px');
+  });
 });
