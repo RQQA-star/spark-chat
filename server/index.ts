@@ -381,7 +381,7 @@ app.get("/api/conversations/:id/messages", (req, res) => {
 // 发送通用消息（文本 / 自动回复占位等）。Agent 消息走 /agent 端点。
 // 客户端仅允许发送 text/voice/image/file/merged 及扩展类型（sticker/link/video/location/card）；
 // agent/system 由服务端内部写入，禁止客户端伪造。
-const CLIENT_MSG_TYPES = new Set(['text', 'voice', 'image', 'file', 'merged', 'sticker', 'link', 'video', 'location', 'card']);
+const CLIENT_MSG_TYPES = new Set(['text', 'voice', 'image', 'file', 'merged', 'sticker', 'link', 'video', 'location', 'card', 'pat']);
 const SERVER_MSG_TYPES = new Set(['agent', 'system']);
 app.post("/api/conversations/:id/messages", (req, res) => {
   try {
@@ -429,12 +429,15 @@ app.post("/api/conversations/:id/messages", (req, res) => {
     if (msgType === 'card' && (!meta || !meta.card || typeof meta.card.cardId !== 'string' || !meta.card.cardId)) {
       return res.status(400).json({ error: '缺少名片联系人（meta.card.cardId）' });
     }
+    if (msgType === 'pat' && (!meta || typeof meta.pattedId !== 'string' || !meta.pattedId)) {
+      return res.status(400).json({ error: '缺少被拍对象（meta.pattedId）' });
+    }
     if (meta !== undefined && (meta === null || typeof meta !== 'object' || Array.isArray(meta))) {
       return res.status(400).json({ error: 'meta 必须为对象' });
     }
     const clientId = typeof req.body.clientId === 'string' ? req.body.clientId : undefined;
     // msgType 已通过 CLIENT_MSG_TYPES 校验，断言为客户端允许的字面量联合类型以通过严格类型检查
-    const safeMsgType = msgType as 'text' | 'voice' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card';
+    const safeMsgType = msgType as 'text' | 'voice' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card' | 'pat';
     const saved = db.createMessage({
       conversationId, senderId, msgType: safeMsgType, content, audioPath, imagePath, videoPath, duration,
       transcript: typeof transcript === 'string' ? transcript : undefined,

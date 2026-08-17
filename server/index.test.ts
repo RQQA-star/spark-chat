@@ -115,6 +115,29 @@ describe('消息接口校验 (P0-1 + validation)', () => {
     expect(res.status).toBe(200);
     expect(res.body.message?.imagePath).toBe(fname);
   });
+
+  it('拍一拍缺 pattedId → 400', async () => {
+    const conv = await createConversation('p0-1');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'pat' });
+    expect(res.status).toBe(400);
+  });
+
+  it('合法拍一拍 → 200 且 msgType=pat、meta.pattedId 正确', async () => {
+    const conv = await createConversation('p0-1');
+    const res = await postMessage(conv.id, { senderId: 'me', msgType: 'pat', meta: { pattedId: 'u_carol' } });
+    expect(res.status).toBe(200);
+    expect(res.body.message?.msgType).toBe('pat');
+    expect(res.body.message?.meta?.pattedId).toBe('u_carol');
+  });
+
+  it('拍一拍后会话列表预览为 [拍一拍]', async () => {
+    const conv = await createConversation('p0-1');
+    await postMessage(conv.id, { senderId: 'me', msgType: 'pat', meta: { pattedId: 'u_carol' } });
+    const list = await request(app).get('/api/conversations');
+    const entry = (list.body.conversations as any[]).find((c) => c.id === conv.id);
+    expect(entry?.lastMessage?.msgType).toBe('pat');
+    expect(entry?.lastMessage?.content).toBe('[拍一拍]');
+  });
 });
 
 // ============= P1-5 · 会话列表聚合（消除 N+1） =============

@@ -42,6 +42,7 @@ interface ChatPageProps {
   onBatchForward?: (ids: string[]) => void;
   onPreviewImage?: (imagePath: string) => void;
   onPreviewContact?: (contactId: string) => void;
+  onPat?: (targetId: string) => void;
   onFavorite?: (id: string) => void;
   typingMembers: string[];
   loadOlderMessages: () => Promise<void>;
@@ -73,7 +74,7 @@ export function ChatPage({
   isAgentConversation, agentName, onSendText, onSendVoice, onSendImage, onSendFile, onSendAgentAssist, onStop,
   onPermissionAllow, onPermissionDeny, onOpenRemoteAssist, onOpenAgentConfig, onBack,   onClearMessages, onDeleteMessage,
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
-  onPreviewImage, onPreviewContact, onFavorite,
+  onPreviewImage, onPreviewContact, onFavorite, onPat,
   onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
   typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall, focusMessageId, onClearFocusMessage,
 }: ChatPageProps) {
@@ -322,6 +323,7 @@ export function ChatPage({
             onEnterMultiSelect={onEnterMultiSelect}
             onPreviewImage={onPreviewImage}
             onPreviewContact={onPreviewContact}
+            onPat={onPat}
             onFavorite={onFavorite}
             loading={loading}
             focusMessageId={focusMessageId}

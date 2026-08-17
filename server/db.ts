@@ -569,6 +569,7 @@ export function serializeConversation(c: DbConversation): SerializedConversation
     const preview =
       last.msg_type === 'voice' ? '[语音]' :
       last.msg_type === 'image' ? '[图片]' :
+      last.msg_type === 'pat' ? '[拍一拍]' :
       (last.content || '').slice(0, 120);
     lastMessage = {
       content: preview,
@@ -680,6 +681,7 @@ export function getAllConversationsSerialized(): SerializedConversation[] {
         last.msg_type === 'link' ? '[链接]' :
         last.msg_type === 'location' ? '[位置]' :
         last.msg_type === 'card' ? '[名片]' :
+        last.msg_type === 'pat' ? '[拍一拍]' :
         (last.content || '').slice(0, 120);
       lastMessage = {
         content: preview,
@@ -752,7 +754,7 @@ export function getMessagesPage(
 export interface CreateMessageInput {
   conversationId: string;
   senderId: string;
-  msgType: 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card';
+  msgType: 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card' | 'pat';
   content?: string;
   transcript?: string;
   audioPath?: string;

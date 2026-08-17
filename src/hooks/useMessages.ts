@@ -654,12 +654,18 @@ export function useMessages(
     if (msg) triggerAutoReplies('', []);
   }, [conversationId, contacts, meId, commitClientMessage, triggerAutoReplies]);
 
+  // 拍一拍（双击头像）：纯信令消息，不触发自动回复
+  const sendPat = useCallback(async (targetId: string) => {
+    if (!conversationId || !targetId) return;
+    await commitClientMessage({ msgType: 'pat', meta: { pattedId: targetId } });
+  }, [conversationId, commitClientMessage]);
+
   return {
     messages, loadMessages, sendText, sendVoice, sendImage, sendToAgent, retryMessage,
     loadOlderMessages, hasMoreMessages, isLoadingOlder, isInitialLoading,
     typingMembers, isAgentThinking, permissionRequest, handleStop, remoteAssistActive,
     handlePermissionAllow, handlePermissionDeny, deleteMessage,
     recallMessage, editMessage, toggleReaction, sendFile, deleteMessages,
-    sendSticker, sendLink, sendVideo, sendLocation, sendCard,
+    sendSticker, sendLink, sendVideo, sendLocation, sendCard, sendPat,
   };
 }

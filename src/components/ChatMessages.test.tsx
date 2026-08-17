@@ -72,4 +72,14 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(screen.getByLabelText('已送达')).toBeInTheDocument();
     expect(screen.queryByLabelText('已读')).toBeNull();
   });
+
+  it('拍一拍：对方拍我显示「对方 拍了拍 我」', () => {
+    renderMessages([msg({ id: 'p1', msgType: 'pat', senderId: 'other', meta: { pattedId: 'me' } })]);
+    expect(screen.getByText('对方 拍了拍 我')).toBeInTheDocument();
+  });
+
+  it('拍一拍：我拍对方显示「你 拍了拍 对方」', () => {
+    renderMessages([msg({ id: 'p2', msgType: 'pat', senderId: meId, meta: { pattedId: 'other' } })]);
+    expect(screen.getByText('你 拍了拍 对方')).toBeInTheDocument();
+  });
 });

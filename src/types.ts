@@ -36,7 +36,7 @@ export interface LastMessage {
   msgType: string;
   senderId: string;
   createdAt: string;
-  meta?: { forwardedFromName?: string; mentions?: string[]; quote?: QuoteRef } | null;
+  meta?: { forwardedFromName?: string; mentions?: string[]; quote?: QuoteRef; pattedId?: string } | null;
 }
 
 export interface QuoteRef {
@@ -64,7 +64,7 @@ export interface Conversation {
   announcement?: string | null;
 }
 
-export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card';
+export type MsgType = 'text' | 'voice' | 'system' | 'agent' | 'image' | 'file' | 'merged' | 'sticker' | 'link' | 'video' | 'location' | 'card' | 'pat';
 
 export interface ToolCall {
   id: string;
@@ -98,6 +98,8 @@ export interface ConvMessage {
     location?: { lat: number; lng: number; name?: string; address?: string };
     /** 名片消息（分享联系人） */
     card?: { cardId: string; cardName: string; cardAvatarText?: string; cardAvatarColor?: string; cardIsAgent?: boolean };
+    /** 拍一拍：被拍的联系人 id（拍自己时为 meId） */
+    pattedId?: string;
   } | null;
   createdAt: string;
   /** 前端临时状态 */

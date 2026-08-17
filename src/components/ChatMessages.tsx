@@ -27,6 +27,8 @@ interface ChatMessagesProps {
   // 大图灯箱 / 个人名片页
   onPreviewImage?: (imagePath: string) => void;
   onPreviewContact?: (contactId: string) => void;
+  /** 双击头像拍一拍 */
+  onPat?: (targetId: string) => void;
   // 收藏
   onFavorite?: (id: string) => void;
   // 多选模式
@@ -360,7 +362,7 @@ function MessageSkeleton() {
 
 export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,
-  permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, scrollRef,
+  permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, onPat, scrollRef,
   focusMessageId, onFocusHandled, onLoadOlderMessages, hasMoreMessages,
   onPreviewImage, onPreviewContact, onFavorite,
   multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
@@ -494,6 +496,22 @@ export function ChatMessages({
           );
         }
 
+        if (msg.msgType === 'pat') {
+          const pattedId = msg.meta?.pattedId;
+          const patterName = msg.senderId === meId ? '你' : (getContact(msg.senderId)?.name || '对方');
+          const pattedName = pattedId === meId ? '我' : (getContact(pattedId || '')?.name || '对方');
+          return (
+            <Fragment key={msg.id}>
+              {divider}
+              <div className="flex justify-center">
+                <span className="text-xs px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+                  {patterName} 拍了拍 {pattedName}
+                </span>
+              </div>
+            </Fragment>
+          );
+        }
+
         const isMe = msg.senderId === meId;
         const contact = getContact(msg.senderId);
         const name = isMe ? '我' : (contact?.name || '未知');
@@ -533,7 +551,9 @@ export function ChatMessages({
                 <div
                   className="w-9 h-9 flex-shrink-0 rounded-lg flex items-center justify-center font-semibold text-white cursor-pointer"
                   style={{ backgroundColor: avatarColor, fontSize: 14 }}
+                  title="双击拍一拍"
                   onClick={() => { if (!isMe && onPreviewContact) onPreviewContact(msg.senderId); }}
+                  onDoubleClick={() => { if (!multiSelect && onPat) onPat(msg.senderId); }}
                 >
                   {isMe ? <User size={16} /> : (contact?.isAgent ? <Bot size={16} /> : avatarText)}
                 </div>

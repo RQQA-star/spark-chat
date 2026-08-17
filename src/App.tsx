@@ -111,7 +111,7 @@ export default function App() {
     permissionRequest, handleStop, handlePermissionAllow, handlePermissionDeny, deleteMessage, loadMessages,
     loadOlderMessages, hasMoreMessages, isLoadingOlder, remoteAssistActive, isInitialLoading,
     recallMessage, editMessage, toggleReaction, sendFile, deleteMessages,
-    sendSticker, sendLink, sendVideo, sendLocation, sendCard,
+    sendSticker, sendLink, sendVideo, sendLocation, sendCard, sendPat,
   } = useMessages(currentConversation || null, contacts, me.id, applyConversationUpdate);
 
   // 路由发送：Agent 会话走流式，否则普通文本（群聊携带 @ 成员 / 引用回复）
@@ -119,6 +119,11 @@ export default function App() {
     if (isAgentConversation) sendToAgent(text);
     else sendText(text, mentions, quote);
   }, [isAgentConversation, sendToAgent, sendText]);
+
+  // 双击头像拍一拍
+  const handlePat = useCallback((targetId: string) => {
+    sendPat(targetId);
+  }, [sendPat]);
 
   const handleSendAgentAssist = useCallback((text: string) => {
     setRemoteAssist(false);
@@ -325,6 +330,7 @@ export default function App() {
             onSendCard={sendCard}
             onPreviewImage={handlePreviewImage}
             onPreviewContact={handlePreviewContact}
+            onPat={handlePat}
             onFavorite={handleFavorite}
             onRetry={retryMessage}
             typingMembers={typingMembers}
