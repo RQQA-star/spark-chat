@@ -197,9 +197,9 @@ export function Sidebar({
                     <span className="text-xs flex-shrink-0 ml-2" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtTime(conv.lastMessage?.createdAt)}</span>
                   </div>
                   <div className="truncate text-xs mt-0.5" style={{ color: 'var(--td-text-color-placeholder)' }}>
-                    {conv.lastMessage?.meta?.mentions?.includes(meId) && (
+                    {conv.lastMessage?.meta?.mentions?.includes('all') || conv.lastMessage?.meta?.mentions?.includes(meId) ? (
                       <span className="text-[11px] px-1 rounded mr-1" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
-                    )}
+                    ) : null}
                     {conv.lastMessage ? (conv.lastMessage.senderId === 'me' ? '我: ' : '') + conv.lastMessage.content : '暂无消息'}
                   </div>
                 </div>

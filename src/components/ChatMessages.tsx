@@ -550,6 +550,12 @@ export function ChatMessages({
                   </span>
                 )}
 
+                {msg.meta?.mentions?.includes('all') && isGroup && (
+                  <span className="text-[11px] flex items-center gap-1" style={{ color: '#e34d59' }}>
+                    @ 所有人
+                  </span>
+                )}
+
                 {msg.meta?.quote && (
                   <div
                     onClick={() => document.getElementById(`msg-${msg.meta!.quote!.messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}

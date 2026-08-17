@@ -194,7 +194,9 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     }
   };
 
-  const filteredMembers = candidateMembers.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()));
+  const mentionAllOption: Contact = { id: 'all', name: '所有人', avatarText: '@', avatarColor: '#e34d59' } as Contact;
+  const mentionBaseOptions = isGroup ? [mentionAllOption, ...candidateMembers] : candidateMembers;
+  const filteredMembers = mentionBaseOptions.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()));
 
   const selectMention = (name: string) => {
     const el = textareaRef.current;
@@ -214,7 +216,9 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
 
   const collectMentions = (t: string): string[] => {
     if (!isGroup) return [];
-    return candidateMembers.filter(m => t.includes('@' + m.name)).map(m => m.id);
+    const ids = candidateMembers.filter(m => t.includes('@' + m.name)).map(m => m.id);
+    if (/@所有人|@all/i.test(t)) ids.push('all'); // 群 @ 所有人
+    return ids;
   };
 
   const handleSend = () => {
