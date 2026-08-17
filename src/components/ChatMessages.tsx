@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import { Loading } from 'tdesign-react';
 import { ChatMarkdown } from '@tdesign-react/chat';
-import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, MoreVertical, File as FileIcon, Pencil, Star, MapPin, Link2, Video, IdCard } from 'lucide-react';
+import { Bot, User, Trash2, Forward, Reply, RefreshCw, Copy, Smile, Check, CheckCheck, MoreVertical, File as FileIcon, Pencil, Star, MapPin, Link2, Video, IdCard } from 'lucide-react';
 import { ConvMessage, Contact, PermissionRequest } from '../types';
 import { ToolCallsCollapse } from './ToolCallsCollapse';
 import { InlinePermissionCard } from './InlinePermissionCard';
@@ -687,8 +687,8 @@ export function ChatMessages({
                         )}
                       </span>
                     ) : (
-                      <span className="text-[11px] px-1" style={{ color: msg.readAt ? '#07c160' : 'var(--td-text-color-placeholder)' }}>
-                        {msg.readAt ? '已读' : '已送达'}
+                      <span className="text-[11px] px-1 inline-flex items-center" style={{ color: msg.readAt ? '#07c160' : 'var(--td-text-color-placeholder)' }}>
+                        {msg.readAt ? <CheckCheck size={14} aria-label="已读" /> : <Check size={14} aria-label="已送达" />}
                       </span>
                     )
                   )}

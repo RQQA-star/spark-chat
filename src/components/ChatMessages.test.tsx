@@ -61,8 +61,15 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(screen.queryByText('重试')).toBeNull();
   });
 
-  it('已读消息显示「已读」而非「已送达」', () => {
+  it('已读消息显示双勾「已读」', () => {
     renderMessages([msg({ id: 'r1', senderId: meId, status: 'sent', content: 'z', readAt: new Date().toISOString() })]);
-    expect(screen.getByText('已读')).toBeInTheDocument();
+    expect(screen.getByLabelText('已读')).toBeInTheDocument();
+    expect(screen.queryByLabelText('已送达')).toBeNull();
+  });
+
+  it('未读消息显示单勾「已送达」', () => {
+    renderMessages([msg({ id: 'r1', senderId: meId, status: 'sent', content: 'z' })]);
+    expect(screen.getByLabelText('已送达')).toBeInTheDocument();
+    expect(screen.queryByLabelText('已读')).toBeNull();
   });
 });
