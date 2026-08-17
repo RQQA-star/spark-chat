@@ -15,7 +15,24 @@ interface RemoteAction {
   params: Record<string, any>;
 }
 
+/** 服务端审计条目（与 server/remoteSession.ts 的 RemoteAuditEntry 对应） */
+interface ServerAuditEntry {
+  ts: number;
+  kind: 'start' | 'request' | 'result' | 'close';
+  action?: string;
+  summary?: string;
+  ok?: boolean;
+  error?: string;
+}
+
 const HELPER_WS = 'ws://127.0.0.1:17890';
+
+const AUDIT_KIND_LABEL: Record<string, string> = {
+  start: '▶ 发起',
+  request: '→ 请求',
+  result: '← 结果',
+  close: '■ 结束',
+};
 
 /**
  * 跨机远程协助 · 被控端桥接面板（含执行前确认闸）
@@ -53,6 +70,8 @@ export function RemoteAssistSession({ visible, conversationId, onClose }: Remote
   const [autoDenyDanger, setAutoDenyDanger] = useState(true);
   const [audit, setAudit] = useState({ allowed: 0, denied: 0, failed: 0 });
   const [dialogAction, setDialogAction] = useState<RemoteAction | null>(null);
+  const [serverAudit, setServerAudit] = useState<ServerAuditEntry[]>([]);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -213,9 +232,33 @@ export function RemoteAssistSession({ visible, conversationId, onClose }: Remote
     } finally { setBusy(false); }
   }, [conversationId, connectHelper, startPoll]);
 
+  // 拉取服务端权威审计记录（被控端事后核查 / 与本地日志互补）
+  const fetchAudit = useCallback(async () => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    try {
+      const r = await fetch(`/api/remote/session/${sid}/audit`);
+      const data = await r.json();
+      setServerAudit(Array.isArray(data.audit) ? data.audit : []);
+    } catch { /* ignore */ }
+  }, []);
+
+  // 打开审计面板且协助进行中时，每 2s 自动刷新
+  useEffect(() => {
+    if (!auditOpen || status !== 'active') return;
+    fetchAudit();
+    const t = window.setInterval(fetchAudit, 2000);
+    return () => window.clearInterval(t);
+  }, [auditOpen, status, fetchAudit]);
+
   // 关闭面板时清理
   useEffect(() => {
-    if (!visible) { stopAll(); setStatus('idle'); setActionCount(0); setLog([]); setAudit({ allowed: 0, denied: 0, failed: 0 }); }
+    if (!visible) {
+      stopAll();
+      setStatus('idle'); setActionCount(0); setLog([]);
+      setAudit({ allowed: 0, denied: 0, failed: 0 });
+      setServerAudit([]); setAuditOpen(false);
+    }
   }, [visible, stopAll]);
   useEffect(() => () => stopAll(), [stopAll]);
 
@@ -269,6 +312,29 @@ export function RemoteAssistSession({ visible, conversationId, onClose }: Remote
           <div className="text-[11px] font-mono rounded-lg p-2 max-h-32 overflow-y-auto" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
             {log.length ? log.map((l, i) => <div key={i}>{l}</div>) : <div className="opacity-60">（暂无日志）</div>}
           </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs" style={{ color: 'var(--td-text-color-secondary)' }}>完整审计（服务端权威记录）</span>
+            <Button size="small" variant="text" disabled={status !== 'active'} onClick={() => setAuditOpen((o) => !o)}>
+              {auditOpen ? '收起' : '📋 查看'}
+            </Button>
+          </div>
+          {auditOpen && (
+            <div className="text-[11px] font-mono rounded-lg p-2 max-h-40 overflow-y-auto" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
+              {serverAudit.length ? serverAudit.slice().reverse().map((e, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <span className="shrink-0 opacity-70">{new Date(e.ts).toLocaleTimeString()}</span>
+                  <span className="shrink-0">{AUDIT_KIND_LABEL[e.kind] || e.kind}</span>
+                  <span className="break-all">
+                    {[e.action, e.summary].filter(Boolean).join(' · ')}
+                    {e.kind === 'result' ? (e.ok ? ' ✅' : ` ❌ ${e.error || ''}`) : ''}
+                  </span>
+                </div>
+              )) : <div className="opacity-60">（暂无审计记录）</div>}
+            </div>
+          )}
         </div>
       </div>
 
