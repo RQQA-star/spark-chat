@@ -1,12 +1,12 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Button, Tooltip, Loading } from 'tdesign-react';
-import { Monitor, ArrowLeft, Trash2, MessageCircle, Users, Bot, Megaphone, Video } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Megaphone, Video, MoreVertical } from 'lucide-react';
 import { Conversation, Contact, ConvMessage, PermissionRequest } from '../types';
 import { ChatMessages } from '../components/ChatMessages';
 import { ChatInput } from '../components/ChatInput';
 import { RemoteAssistSession } from '../components/RemoteAssistSession';
 
-interface ChatPageProps {
+export interface ChatPageProps {
   conversation: Conversation;
   contacts: Contact[];
   meId: string;
@@ -100,6 +100,12 @@ export function ChatPage({
   const lastConvIdRef = useRef<string | null>(null);
   const getContact = (id: string) => contacts.find(c => c.id === id);
   const members = conversation.participantIds.map(getContact).filter(Boolean) as Contact[];
+  // 微信式标题：群聊显示「群名 (人数)」；单聊显示对方备注名（无备注则名称）
+  const peer = conversation.type === 'direct' ? getContact(conversation.participantIds.find(id => id !== meId) || '') : null;
+  const displayTitle = conversation.type === 'group'
+    ? `${conversation.title} (${members.length})`
+    : (peer?.remark || conversation.title);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // 滚动到顶部时加载更早的历史消息；prepend 后保持滚动位置不跳动
   const handleScroll = useCallback(() => {
@@ -227,56 +233,48 @@ export function ChatPage({
               <ArrowLeft />
             </button>
             <div className="flex-1 min-w-0">
-              <div className="truncate font-medium" style={{ color: 'var(--td-text-color-primary)' }}>
-                {conversation.title}
+              <div className="truncate font-medium" style={{ color: 'var(--td-text-color-primary)' }} data-testid="conv-title">
+                {displayTitle}
                 {(conversation.remoteAssistActive || remoteAssistActive) && <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(227,77,89,0.12)', color: '#e34d59' }}>协助中</span>}
               </div>
-              {conversation.type === 'group' && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  {members.slice(0, 6).map(m => <Avatar key={m.id} text={m.avatarText} color={m.avatarColor} size={18} />)}
-                  {members.length > 6 && <span className="text-xs" style={{ color: 'var(--td-text-color-placeholder)' }}>+{members.length - 6}</span>}
-                </div>
-              )}
             </div>
 
-            {isAgentConversation && (
-              <Tooltip content="让助手操作你的电脑（远程协助）">
-                <Button icon={<Monitor />} onClick={onOpenRemoteAssist} theme="danger" variant="outline">
-                  远程协助
-                </Button>
-              </Tooltip>
-            )}
-            {isAgentConversation && (
-              <Tooltip content="配置助手的权限模式、模型与提示词">
-                <Button icon={<Bot />} onClick={onOpenAgentConfig} variant="outline">
-                  助手设置
-                </Button>
-              </Tooltip>
-            )}
-            <Tooltip content="清空聊天记录">
-              <Button icon={<Trash2 />} onClick={onClearMessages} variant="text">
-                清空
-              </Button>
-            </Tooltip>
-            {conversation.type === 'group' && (
-              <Tooltip content="管理群成员与群名称">
-                <Button icon={<Users />} onClick={onManageGroup} variant="text">
-                  群管理
-                </Button>
-              </Tooltip>
-            )}
             {onStartVideoCall && (
               <Tooltip content={conversation.type === 'group' ? '发起群视频（演示）' : '视频通话（演示）'}>
                 <Button icon={<Video />} onClick={onStartVideoCall} variant="text">
-                  视频
+                  {conversation.type === 'group' ? '群视频' : '视频'}
                 </Button>
               </Tooltip>
             )}
-            <Tooltip content="发起跨机远程协助（对方 / 星火助手可远程操作本机）">
-              <Button icon={<Monitor />} onClick={() => setShowRemoteSession(true)} variant="outline">
-                发起远程协助
-              </Button>
-            </Tooltip>
+            <div className="relative">
+              <Tooltip content="更多">
+                <Button icon={<MoreVertical />} variant="text" data-testid="header-more-btn" onClick={() => setMenuOpen(o => !o)} />
+              </Tooltip>
+              {menuOpen && (
+                <>
+                  {/* 点击空白关闭（无需 document 监听） */}
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div
+                    className="absolute right-0 top-full mt-2 z-50 min-w-[160px] rounded-lg py-1 shadow-lg"
+                    style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
+                  >
+                    {conversation.type === 'group' && (
+                      <button key="manage" data-testid="menu-manage" onClick={() => { setMenuOpen(false); onManageGroup(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>群管理</button>
+                    )}
+                    <button key="clear" data-testid="menu-clear" onClick={() => { setMenuOpen(false); onClearMessages(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>清空聊天记录</button>
+                    {!isAgentConversation && (
+                      <button key="remote" data-testid="menu-remote" onClick={() => { setMenuOpen(false); setShowRemoteSession(true); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>发起远程协助</button>
+                    )}
+                    {isAgentConversation && (
+                      <button key="assist" data-testid="menu-assist" onClick={() => { setMenuOpen(false); onOpenRemoteAssist(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>远程协助</button>
+                    )}
+                    {isAgentConversation && (
+                      <button key="cfg" data-testid="menu-cfg" onClick={() => { setMenuOpen(false); onOpenAgentConfig(); }} className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-primary)' }}>助手设置</button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </>
         )}
       </header>
