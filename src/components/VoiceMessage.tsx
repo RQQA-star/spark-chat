@@ -37,7 +37,7 @@ async function decodeWaveform(url: string, bars = 36): Promise<number[]> {
   }
 }
 
-export function VoiceMessage({ audioPath, duration, transcript }: { audioPath: string; duration?: number | null; transcript?: string | null }) {
+export function VoiceMessage({ audioPath, duration, transcript, onPlayed }: { audioPath: string; duration?: number | null; transcript?: string | null; onPlayed?: () => void }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -67,7 +67,7 @@ export function VoiceMessage({ audioPath, duration, transcript }: { audioPath: s
     const a = audioRef.current;
     if (!a) return;
     if (playing) { a.pause(); setPlaying(false); }
-    else { void a.play(); setPlaying(true); }
+    else { void a.play(); setPlaying(true); onPlayed?.(); }
   };
 
   const total = duration || 0;

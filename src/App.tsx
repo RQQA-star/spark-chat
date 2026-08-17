@@ -47,6 +47,13 @@ export default function App() {
   const [reeditMsg, setReeditMsg] = useState<{ text: string; nonce: number } | null>(null);
   // 各会话未发送草稿（切换会话后回填输入框，并在会话列表显示「[草稿]」）
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // 已播放的语音消息（localStorage 持久化，控制未读红点）
+  const [playedVoice, setPlayedVoice] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('spark:playedVoice');
+      return raw ? new Set<string>(JSON.parse(raw)) : new Set<string>();
+    } catch { return new Set<string>(); }
+  });
   // 待转发的内容：可能是单条消息，也可能是多选合并后的「聊天记录」
   const [pendingForward, setPendingForward] = useState<{ message?: ConvMessage; merged?: { title: string; content: string } } | null>(null);
   const [agentConfigOpen, setAgentConfigOpen] = useState(false);
@@ -145,6 +152,16 @@ export default function App() {
       }
       if (prev[convId] === t) return prev;
       return { ...prev, [convId]: t };
+    });
+  }, []);
+  // 标记语音已播放（持久化，未读红点消失）
+  const markVoicePlayed = useCallback((id: string) => {
+    setPlayedVoice((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      try { localStorage.setItem('spark:playedVoice', JSON.stringify([...next])); } catch { /* 忽略 */ }
+      return next;
     });
   }, []);
 
@@ -357,6 +374,8 @@ export default function App() {
             onPat={handlePat}
             onReedit={handleReedit}
             onFavorite={handleFavorite}
+            playedVoice={playedVoice}
+            onVoicePlayed={markVoicePlayed}
             draft={currentConversationId ? (drafts[currentConversationId] || '') : ''}
             onDraftChange={(text) => handleDraftChange(currentConversationId || '', text)}
             onRetry={retryMessage}

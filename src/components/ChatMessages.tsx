@@ -31,6 +31,10 @@ interface ChatMessagesProps {
   onPat?: (targetId: string) => void;
   /** 撤回后重新编辑（仅本人文本消息、撤回 2 分钟内） */
   onReedit?: (content: string) => void;
+  /** 已播放的语音消息 id 集合（用于未读红点） */
+  playedVoice?: Set<string>;
+  /** 语音开始播放时回调（标记已读） */
+  onVoicePlayed?: (id: string) => void;
   // 收藏
   onFavorite?: (id: string) => void;
   // 多选模式
@@ -369,7 +373,7 @@ export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,
   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, onPat, scrollRef,
   focusMessageId, onFocusHandled, onLoadOlderMessages, hasMoreMessages,
-  onPreviewImage, onPreviewContact, onFavorite, onReedit,
+  onPreviewImage, onPreviewContact, onFavorite, onReedit, playedVoice, onVoicePlayed,
   multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
   loading = false,
 }: ChatMessagesProps) {
@@ -627,9 +631,13 @@ export function ChatMessages({
                     )}
 
                     {msg.msgType === 'voice' && msg.audioPath && (
-                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                      <div className="relative px-1 py-1" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                        {/* 收到的语音未播放时显示未读红点（微信式） */}
+                        {msg.senderId !== meId && !playedVoice?.has(msg.id) && (
+                          <span data-testid="voice-unread" className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#fa5151' }} />
+                        )}
                         <div style={{ color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}>
-                          <VoiceMessage audioPath={msg.audioPath} duration={msg.duration} transcript={msg.transcript} />
+                          <VoiceMessage audioPath={msg.audioPath} duration={msg.duration} transcript={msg.transcript} onPlayed={() => onVoicePlayed?.(msg.id)} />
                         </div>
                       </div>
                     )}

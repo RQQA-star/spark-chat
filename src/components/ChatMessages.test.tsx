@@ -143,4 +143,19 @@ describe('ChatMessages —— 渲染与交互', () => {
     expect(divider).toHaveTextContent('14:32');
     expect(divider).not.toHaveTextContent('今天');
   });
+
+  it('收到的语音消息未播放时显示未读红点', () => {
+    renderMessages([msg({ id: 'v1', msgType: 'voice', senderId: 'other', audioPath: 'a.webm', duration: 3000 })], { playedVoice: new Set() });
+    expect(screen.getByTestId('voice-unread')).toBeInTheDocument();
+  });
+
+  it('自己发送的语音消息不显示未读红点', () => {
+    renderMessages([msg({ id: 'v2', msgType: 'voice', senderId: meId, audioPath: 'b.webm', duration: 3000 })], { playedVoice: new Set() });
+    expect(screen.queryByTestId('voice-unread')).toBeNull();
+  });
+
+  it('已播放的语音消息不显示未读红点', () => {
+    renderMessages([msg({ id: 'v3', msgType: 'voice', senderId: 'other', audioPath: 'c.webm', duration: 3000 })], { playedVoice: new Set(['v3']) });
+    expect(screen.queryByTestId('voice-unread')).toBeNull();
+  });
 });

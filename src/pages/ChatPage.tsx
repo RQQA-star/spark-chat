@@ -67,6 +67,10 @@ interface ChatPageProps {
   draft?: string;
   /** 输入框文本变化回传，用于持久化草稿 */
   onDraftChange?: (text: string) => void;
+  /** 已播放的语音消息 id 集合（未读红点） */
+  playedVoice?: Set<string>;
+  /** 语音开始播放时回调（标记已读） */
+  onVoicePlayed?: (id: string) => void;
 }
 
 function Avatar({ text, color, size = 28 }: { text?: string | null; color?: string | null; size?: number }) {
@@ -86,6 +90,7 @@ export function ChatPage({
   onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
   typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall,   focusMessageId, onClearFocusMessage,
   draft, onDraftChange,
+  playedVoice, onVoicePlayed,
 }: ChatPageProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -335,6 +340,8 @@ export function ChatPage({
             onPat={onPat}
             onFavorite={onFavorite}
             onReedit={onReedit}
+            playedVoice={playedVoice}
+            onVoicePlayed={onVoicePlayed}
             loading={loading}
             focusMessageId={focusMessageId}
             onFocusHandled={onClearFocusMessage}
