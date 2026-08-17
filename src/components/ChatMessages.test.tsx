@@ -175,4 +175,16 @@ describe('ChatMessages —— 渲染与交互', () => {
     const fileLink = screen.getByText('a.pdf').closest('a')!;
     expect(fileLink.style.borderRadius).toBe('8px 8px 8px 2px');
   });
+
+  it('引用块展示被引用者名称与预览，并采用微信式内嵌样式（6px 小圆角 + 2px 左 accent）', () => {
+    renderMessages([msg({
+      id: 'q1', senderId: meId, content: '回复内容',
+      meta: { quote: { messageId: 'x', senderName: '对方', preview: '被引用的长文本预览' } },
+    })]);
+    const block = screen.getByTestId('quote-block');
+    expect(block).toHaveTextContent('对方');
+    expect(block).toHaveTextContent('被引用的长文本预览');
+    expect(block.style.borderRadius).toBe('6px');
+    expect(block.style.borderLeftWidth).toBe('2px');
+  });
 });

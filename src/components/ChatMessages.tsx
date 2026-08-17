@@ -604,11 +604,17 @@ export function ChatMessages({
                 {msg.meta?.quote && (
                   <div
                     onClick={() => document.getElementById(`msg-${msg.meta!.quote!.messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                    className="max-w-full px-2.5 py-1.5 rounded-lg cursor-pointer text-xs mb-1"
-                    style={{ backgroundColor: 'var(--td-bg-color-component)', borderLeft: '3px solid #07c160' }}
+                    data-testid="quote-block"
+                    className="max-w-full px-2.5 py-1.5 cursor-pointer text-xs mb-1.5"
+                    style={{
+                      // 微信式引用：内嵌于气泡之上的半透明色带，本人绿底用透白、对方白底用浅灰
+                      backgroundColor: isMe ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.045)',
+                      borderRadius: '6px',
+                      borderLeft: `2px solid ${isMe ? 'rgba(255,255,255,0.6)' : '#07c160'}`,
+                    }}
                   >
-                    <div className="font-medium" style={{ color: 'var(--td-text-color-secondary)' }}>{msg.meta.quote.senderName}</div>
-                    <div className="truncate" style={{ color: 'var(--td-text-color-placeholder)' }}>{msg.meta.quote.preview}</div>
+                    <div className="font-medium truncate" style={{ color: isMe ? 'rgba(255,255,255,0.95)' : 'var(--td-text-color-secondary)' }}>{msg.meta.quote.senderName}</div>
+                    <div className="truncate" style={{ color: isMe ? 'rgba(255,255,255,0.72)' : 'var(--td-text-color-placeholder)' }}>{msg.meta.quote.preview}</div>
                   </div>
                 )}
 
