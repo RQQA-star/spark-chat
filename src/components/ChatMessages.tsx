@@ -139,9 +139,9 @@ function FileBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
       href={`/api/file/${msg.filePath || msg.fileName}`}
       download={msg.fileName || 'file'}
       className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[220px] max-w-[280px] no-underline"
-      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-component)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-component)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
     >
-      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#0052d9', color: '#fff' }}>
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : '#0052d9', color: '#fff' }}>
         <FileIcon size={20} />
       </div>
       <div className="min-w-0 flex-1">
@@ -162,16 +162,16 @@ function MergedBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
   return (
     <div
       className="rounded-lg overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
-      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-container)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
       onClick={() => setExpanded(v => !v)}
     >
-      <div className="px-3 py-2 font-medium text-sm border-b" style={{ borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'var(--td-component-stroke)' }}>
+      <div className="px-3 py-2 font-medium text-sm border-b" style={{ borderColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : 'var(--td-component-stroke)' }}>
         {data?.title || '聊天记录'}
       </div>
       <div className="px-3 py-2 flex flex-col gap-1.5">
         {shown.map((it, i) => (
           <div key={i} className="text-xs leading-snug">
-            <span style={{ color: isMe ? '#fff' : '#0052d9', fontWeight: 600 }}>{it.senderName}</span>
+            <span style={{ color: isMe ? 'var(--spark-own-bubble-text)' : '#0052d9', fontWeight: 600 }}>{it.senderName}</span>
             <span className="opacity-60 mx-1">{it.time}</span>
             <span className="opacity-80">{it.preview}</span>
           </div>
@@ -207,9 +207,9 @@ function LinkBubble({ msg, isMe }: { msg: ConvMessage; isMe: boolean }) {
       target="_blank"
       rel="noreferrer"
       className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[240px] max-w-[300px] no-underline"
-      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-component)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-component)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
     >
-      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#0052d9', color: '#fff' }}>
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : '#0052d9', color: '#fff' }}>
         <Link2 size={20} />
       </div>
       <div className="min-w-0 flex-1">
@@ -250,7 +250,7 @@ function LocationBubble({ msg, isMe, onOpen }: { msg: ConvMessage; isMe: boolean
   return (
     <div
       className="rounded-lg overflow-hidden min-w-[240px] max-w-[300px] cursor-pointer"
-      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-container)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
       onClick={onOpen}
     >
       <div
@@ -269,7 +269,7 @@ function LocationBubble({ msg, isMe, onOpen }: { msg: ConvMessage; isMe: boolean
           target="_blank"
           rel="noreferrer"
           className="block text-center text-[12px] py-1.5 border-t"
-          style={{ borderColor: isMe ? 'rgba(255,255,255,0.2)' : 'var(--td-component-stroke)', color: '#0052d9' }}
+          style={{ borderColor: isMe ? 'var(--spark-own-bubble-icon-bg)' : 'var(--td-component-stroke)', color: '#0052d9' }}
           onClick={(e) => e.stopPropagation()}
         >
           在地图中打开
@@ -286,7 +286,7 @@ function CardBubble({ msg, isMe, onPreviewContact }: { msg: ConvMessage; isMe: b
   return (
     <div
       className="flex items-center gap-3 px-3 py-2.5 rounded-lg min-w-[220px] max-w-[280px] cursor-pointer"
-      style={{ backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'var(--td-bg-color-container)', color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+      style={{ backgroundColor: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)', color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
       onClick={() => onPreviewContact?.(card.cardId)}
     >
       <div className="w-11 h-11 rounded-lg flex items-center justify-center font-semibold text-white flex-shrink-0" style={{ backgroundColor: card.cardAvatarColor || '#888', fontSize: 16 }}>
@@ -470,7 +470,7 @@ export function ChatMessages({
         const selected = multiSelect && selection.has(msg.id);
 
         const bubbleStyle = isMe
-          ? { backgroundColor: '#07c160', color: '#fff', borderRadius: '14px 14px 4px 14px', opacity: msg.status === 'failed' ? 0.6 : 1 }
+          ? { backgroundColor: 'var(--spark-own-bubble-bg)', color: 'var(--spark-own-bubble-text)', borderRadius: '14px 14px 4px 14px', opacity: msg.status === 'failed' ? 0.6 : 1 }
           : { backgroundColor: 'var(--td-bg-color-container)', color: 'var(--td-text-color-primary)', borderRadius: '14px 14px 14px 4px', opacity: msg.status === 'failed' ? 0.6 : 1 };
 
         const onBubbleClick = () => {
@@ -538,10 +538,10 @@ export function ChatMessages({
                       autoFocus
                       rows={2}
                       className="w-full bg-transparent outline-none resize-none px-3 py-2 text-[15px]"
-                      style={{ color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}
+                      style={{ color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}
                     />
                     <div className="flex justify-end gap-2 px-2 pb-2">
-                      <button onClick={() => setEditingId(null)} className="text-xs px-2 py-1 rounded" style={{ color: isMe ? '#fff' : 'var(--td-text-color-secondary)' }}>取消</button>
+                      <button onClick={() => setEditingId(null)} className="text-xs px-2 py-1 rounded" style={{ color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-secondary)' }}>取消</button>
                       <button onClick={() => commitEdit(msg.id)} className="text-xs px-2 py-1 rounded" style={{ color: '#fff', backgroundColor: '#07c160' }}>保存</button>
                     </div>
                   </div>
@@ -555,15 +555,15 @@ export function ChatMessages({
                     )}
 
                     {msg.msgType === 'voice' && msg.audioPath && (
-                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
-                        <div style={{ color: isMe ? '#fff' : 'var(--td-text-color-primary)' }}>
+                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                        <div style={{ color: isMe ? 'var(--spark-own-bubble-text)' : 'var(--td-text-color-primary)' }}>
                           <VoiceMessage audioPath={msg.audioPath} duration={msg.duration} transcript={msg.transcript} />
                         </div>
                       </div>
                     )}
 
                     {msg.msgType === 'image' && msg.imagePath && (
-                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? '#07c160' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
+                      <div className="px-1 py-1" style={{ ...bubbleStyle, background: isMe ? 'var(--spark-own-bubble-bg)' : 'var(--td-bg-color-container)' }} onClick={onBubbleClick}>
                         <ImageBubble imagePath={msg.imagePath} onPreview={onPreviewImage} />
                       </div>
                     )}

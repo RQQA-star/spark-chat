@@ -92,7 +92,12 @@ body {
   --td-brand-color-hover: #60a5fa;
   --td-brand-color-active: #2563eb;
   --td-brand-color-light: rgba(59, 130, 246, 0.1);
-  
+
+  /* 本人消息气泡：与文本气泡一致的绿色，集中管理便于主题微调 */
+  --spark-own-bubble-bg: #07c160;
+  --spark-own-bubble-text: #ffffff;
+  --spark-own-bubble-icon-bg: rgba(255, 255, 255, 0.25);
+
   /* 背景色 - 浅色模式 */
   --td-bg-color-page: #ffffff;
   --td-bg-color-container: #fafafa;
@@ -141,7 +146,12 @@ body {
   --td-brand-color-hover: #93c5fd;
   --td-brand-color-active: #3b82f6;
   --td-brand-color-light: rgba(96, 165, 250, 0.15);
-  
+
+  /* 本人消息气泡：深色下仍为绿色，保持一致 */
+  --spark-own-bubble-bg: #07c160;
+  --spark-own-bubble-text: #ffffff;
+  --spark-own-bubble-icon-bg: rgba(255, 255, 255, 0.25);
+
   /* 背景色 - 深色模式 */
   --td-bg-color-page: #121212;
   --td-bg-color-container: #1c1c1c;
