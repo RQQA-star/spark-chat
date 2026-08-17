@@ -30,6 +30,7 @@ interface RemoteSession {
   status: 'active' | 'closed';
   actions: RemoteAction[];
   pending: Map<string, PendingResult>;
+  audit: RemoteAuditEntry[];
 }
 
 const sessions = new Map<string, RemoteSession>();
@@ -37,6 +38,35 @@ const byConversation = new Map<string, string>(); // conversationId -> sessionId
 
 const ACTION_TIMEOUT_MS = 30_000;
 const MAX_ACTIONS = 200;
+const MAX_AUDIT = 500;
+
+/** 审计条目：被控端事后可据此核查「控制端在我的机器上做了什么」 */
+interface RemoteAuditEntry {
+  ts: number;
+  kind: 'start' | 'request' | 'result' | 'close';
+  action?: string;
+  summary?: string; // 指令摘要（run_command=命令；read_file/write_file=路径，write_file 附字节数）
+  ok?: boolean;
+  error?: string;
+}
+
+/** 生成审计用的指令摘要（避免把大文件内容塞进审计记录） */
+function summarizeParams(action: string, params: any): string {
+  if (action === 'run_command') return String(params?.command ?? '');
+  if (action === 'read_file') return String(params?.path ?? '');
+  if (action === 'write_file') {
+    const len = typeof params?.content === 'string' ? params.content.length : 0;
+    return `${params?.path ?? ''} (${len} 字节)`;
+  }
+  return JSON.stringify(params ?? '');
+}
+
+function pushAudit(session: RemoteSession, entry: RemoteAuditEntry): void {
+  session.audit.push(entry);
+  if (session.audit.length > MAX_AUDIT) {
+    session.audit.splice(0, session.audit.length - MAX_AUDIT);
+  }
+}
 
 /** 被控端发起：按会话创建（或复用）一个活跃 session */
 export function createSession(conversationId: string): { sessionId: string } {
@@ -48,10 +78,11 @@ export function createSession(conversationId: string): { sessionId: string } {
   const sessionId = uuidv4();
   const session: RemoteSession = {
     sessionId, conversationId, createdAt: Date.now(), status: 'active',
-    actions: [], pending: new Map(),
+    actions: [], pending: new Map(), audit: [],
   };
   sessions.set(sessionId, session);
   byConversation.set(conversationId, sessionId);
+  pushAudit(session, { ts: Date.now(), kind: 'start', summary: `conversationId=${conversationId}` });
   return { sessionId };
 }
 
@@ -71,6 +102,7 @@ export function closeSession(conversationId: string): void {
   const s = sessions.get(id);
   if (s) {
     s.status = 'closed';
+    pushAudit(s, { ts: Date.now(), kind: 'close' });
     for (const [, p] of s.pending) {
       clearTimeout(p.timer);
       p.resolve({ ok: false, error: '会话已关闭' });
@@ -99,6 +131,7 @@ export function enqueueAction(
   if (session.actions.length > MAX_ACTIONS) {
     session.actions.splice(0, session.actions.length - MAX_ACTIONS);
   }
+  pushAudit(session, { ts: Date.now(), kind: 'request', action, summary: summarizeParams(action, params) });
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       session.pending.delete(id);
@@ -134,5 +167,17 @@ export function submitResult(
     session.pending.delete(actionId);
     p.resolve(result);
   }
+  pushAudit(session, {
+    ts: Date.now(), kind: 'result', action: act.action,
+    summary: summarizeParams(act.action, act.params),
+    ok: result.ok, error: result.error,
+  });
   return true;
+}
+
+/** 查询某 session 的审计记录（被控端事后核查用；未知 sessionId 返空数组） */
+export function getAudit(sessionId: string): RemoteAuditEntry[] {
+  const session = sessions.get(sessionId);
+  if (!session) return [];
+  return session.audit.map((e) => ({ ...e }));
 }

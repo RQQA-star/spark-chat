@@ -10,7 +10,7 @@ import QRCode from "qrcode";
 import * as db from "./db.js";
 import * as nativeAssistant from "./nativeAssistant.js";
 import { buildRemoteAssistMcpServer, buildRemoteActionMcpServer } from "./remoteAssistTools.js";
-import { createSession, getSessionIdByConversation, closeSession, fetchPendingActions, submitResult } from "./remoteSession.js";
+import { createSession, getSessionIdByConversation, closeSession, fetchPendingActions, submitResult, getAudit } from "./remoteSession.js";
 import { isAllowedOrigin, isTokenValid, extractBearerToken, getAccessToken } from "./security.js";
 import { securityHeaders, rateLimit } from "./hardening.js";
 
@@ -1251,6 +1251,12 @@ app.get('/api/remote/session/:sessionId/actions', (req, res) => {
   const lastId = String(req.query.lastId || '');
   const actions = fetchPendingActions(sessionId, lastId);
   res.json({ actions, lastId: actions.length ? actions[actions.length - 1].id : lastId });
+});
+
+// 审计查询：被控端事后核查控制端在自己机器上的操作（未知 sessionId 返空数组）
+app.get('/api/remote/session/:sessionId/audit', (req, res) => {
+  const sessionId = String(req.params.sessionId || '');
+  res.json({ audit: getAudit(sessionId) });
 });
 
 app.post('/api/remote/session/:sessionId/result', (req, res) => {
