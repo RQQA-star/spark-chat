@@ -11,6 +11,8 @@
  * 监听：ws://127.0.0.1:17890
  */
 import { WebSocketServer } from 'ws';
+import { exec } from 'child_process';
+import fs from 'fs';
 import { mouse, keyboard, Point, screen, Key, Button } from '@nut-tree-fork/nut-js';
 
 const PORT = 17890;
@@ -77,10 +79,35 @@ const wss = new WebSocketServer({ host: '127.0.0.1', port: PORT });
 wss.on('connection', (ws) => {
   console.log(`[assist] 被控端浏览器已连接（客户端数 ${wss.clients.size}）`);
   screenSize().then(s => ws.send(JSON.stringify({ type: 'ready', screen: s })));
+
+  // 跨机远程协助：执行来自控制端（经服务器中转）的结构化 action，并回传结果。
+  // 注意：这些指令会在本机真实执行，仅在被控端主动「发起远程协助」并授权后才生效。
+  const applyAction = async (msg) => {
+    const { actionId, action, params = {} } = msg;
+    try {
+      let output = '';
+      if (action === 'run_command') {
+        output = await runCommand(params.command);
+      } else if (action === 'read_file') {
+        output = await fs.promises.readFile(params.path, 'utf8');
+      } else if (action === 'write_file') {
+        await fs.promises.writeFile(params.path, params.content || '', 'utf8');
+        output = `已写入 ${params.path}（${Buffer.byteLength(params.content || '', 'utf8')} 字节）`;
+      } else {
+        ws.send(JSON.stringify({ type: 'action_result', actionId, ok: false, error: '不支持的 action: ' + action }));
+        return;
+      }
+      ws.send(JSON.stringify({ type: 'action_result', actionId, ok: true, output: String(output) }));
+    } catch (e) {
+      ws.send(JSON.stringify({ type: 'action_result', actionId, ok: false, error: e?.message || String(e) }));
+    }
+  };
+
   ws.on('message', async (raw) => {
     try {
       const ev = JSON.parse(raw.toString());
-      await apply(ev);
+      if (ev.type === 'action') { await applyAction(ev); }
+      else { await apply(ev); }
     } catch (e) {
       console.error('[assist] 处理事件失败:', e?.message || e);
     }
@@ -88,6 +115,16 @@ wss.on('connection', (ws) => {
   ws.on('close', () => console.log(`[assist] 连接断开（剩余 ${wss.clients.size}）`));
   ws.on('error', (e) => console.error('[assist] socket 错误:', e?.message || e));
 });
+
+function runCommand(cmd) {
+  return new Promise((resolve, reject) => {
+    if (!cmd || typeof cmd !== 'string') return reject(new Error('command 不能为空'));
+    exec(cmd, { maxBuffer: 5 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+      if (err) return reject(new Error(stderr || err.message));
+      resolve((stdout || '') + (stderr ? '\n[stderr]\n' + stderr : ''));
+    });
+  });
+}
 
 console.log(`✅ 原生键鼠注入助手已启动，监听 ws://127.0.0.1:${PORT}`);
 console.log('   被控端浏览器需开启「原生注入」，才会把输入转发到这里。');

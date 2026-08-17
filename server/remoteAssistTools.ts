@@ -17,6 +17,7 @@ import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { WebSocket } from 'ws';
 import * as nativeAssistant from './nativeAssistant.js';
+import { enqueueAction, getSessionIdByConversation } from './remoteSession.js';
 
 const HELPER_WS = 'ws://127.0.0.1:17890';
 
@@ -122,4 +123,47 @@ export function buildRemoteAssistMcpServer(): SdkMcpServerResult {
     injectInputHandler,
   );
   return createSdkMcpServer({ name: 'native-input', tools: [injectInputTool] });
+}
+
+/**
+ * 跨机远程协助 · 远程操作工具（remote_action）
+ * ----------------------------------------------------------
+ * 当某会话已发起远程协助（存在活跃 session）时挂载，供控制端（通常是星火助手）调用，
+ * 把指令经 server/remoteSession 中继到被控端机器执行，并取回结构化结果。
+ * 直接命中用户场景：「B 用自己 AI 去对接对方电脑设置 AI / 某些设置」。
+ */
+export function buildRemoteActionMcpServer(conversationId: string): SdkMcpServerResult {
+  const remoteActionTool = tool(
+    'remote_action',
+    '跨机远程协助：向对方（被控端）的电脑发送一条操作指令并取回执行结果。' +
+    '仅当该会话已发起远程协助且被控端在线时可用。用于帮对方配置 AI、修改设置、运行命令等。',
+    {
+      action: z.enum(['run_command', 'read_file', 'write_file']).describe(
+        '操作类型：run_command 运行命令 / read_file 读取文件 / write_file 写入文件',
+      ),
+      command: z.string().optional().describe('run_command 时的命令（含参数），如 "npm config set registry https://x"'),
+      path: z.string().optional().describe('read_file / write_file 时的文件绝对路径'),
+      content: z.string().optional().describe('write_file 时写入的文件内容'),
+    },
+    async (args: { action: string; command?: string; path?: string; content?: string }): Promise<CallToolResult> => {
+      const sessionId = getSessionIdByConversation(conversationId);
+      if (!sessionId) {
+        return {
+          content: [{
+            type: 'text',
+            text: '⚠️ 该会话没有活跃的远程协助 session，无法远程操作。请先让对方在会话里发起远程协助并保持在线。',
+          }],
+        };
+      }
+      const res = await enqueueAction(conversationId, args.action, {
+        command: args.command, path: args.path, content: args.content,
+      });
+      if (!res.ok) {
+        return { content: [{ type: 'text', text: `⚠️ 远程操作失败：${res.error || '未知错误'}` }] };
+      }
+      const out = res.output || '(无输出)';
+      return { content: [{ type: 'text', text: `✅ 对方机器已执行 ${args.action}：\n${out}` }] };
+    },
+  );
+  return createSdkMcpServer({ name: 'remote-action', tools: [remoteActionTool] });
 }

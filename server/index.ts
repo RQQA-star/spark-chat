@@ -9,7 +9,8 @@ import { fileURLToPath } from "url";
 import QRCode from "qrcode";
 import * as db from "./db.js";
 import * as nativeAssistant from "./nativeAssistant.js";
-import { buildRemoteAssistMcpServer } from "./remoteAssistTools.js";
+import { buildRemoteAssistMcpServer, buildRemoteActionMcpServer } from "./remoteAssistTools.js";
+import { createSession, getSessionIdByConversation, closeSession, fetchPendingActions, submitResult } from "./remoteSession.js";
 import { isAllowedOrigin, isTokenValid, extractBearerToken, getAccessToken } from "./security.js";
 import { securityHeaders, rateLimit } from "./hardening.js";
 
@@ -1104,12 +1105,25 @@ app.post("/api/conversations/:id/agent", async (req, res) => {
     permissionMode: permMode as any,
     canUseTool,
   };
+  // 本机远程协助：挂载原生键鼠注入工具；跨机远程协助：若该会话已发起，挂载 remote_action 工具。
+  const mcpServers: Record<string, any> = {};
   if (remoteAssist) {
     try {
-      queryOptions.mcpServers = { "native-input": buildRemoteAssistMcpServer() };
+      mcpServers["native-input"] = buildRemoteAssistMcpServer();
     } catch (e: any) {
       console.warn("[agent] 挂载原生注入工具失败，Agent 将仅靠 CLI 工具：", e?.message || e);
     }
+  }
+  const remoteSessionId = getSessionIdByConversation(conversationId);
+  if (remoteSessionId) {
+    try {
+      mcpServers["remote-action"] = buildRemoteActionMcpServer(conversationId);
+    } catch (e: any) {
+      console.warn("[agent] 挂载跨机远程操作工具失败：", e?.message || e);
+    }
+  }
+  if (Object.keys(mcpServers).length) {
+    queryOptions.mcpServers = mcpServers;
   }
 
   try {
@@ -1213,6 +1227,45 @@ app.post("/api/native-assistant/start", (_req, res) => {
 });
 app.post("/api/native-assistant/stop", (_req, res) => {
   res.json(nativeAssistant.stop());
+});
+
+// ============= 跨机远程协助：会话创建 + action 中继（服务端中转） =============
+// 被控端「发起远程协助」→ 创建 session（按 conversationId 绑定）；其浏览器标签页轮询
+// 待执行 action 并经本地原生助手执行，回传结果。控制端（星火助手）经 remote_action
+// 工具把指令入队，等待被控端取走执行。无需 TURN，部署一个可达服务器即可跨机。
+app.post('/api/remote/session', (req, res) => {
+  const conversationId = String(req.body?.conversationId || '');
+  if (!conversationId) return res.status(400).json({ error: '缺少 conversationId' });
+  if (!db.getConversation(conversationId)) return res.status(404).json({ error: '会话不存在' });
+  const { sessionId } = createSession(conversationId);
+  res.json({ sessionId, conversationId });
+});
+
+app.get('/api/remote/session', (req, res) => {
+  const conversationId = String(req.query.conversationId || '');
+  res.json({ sessionId: getSessionIdByConversation(conversationId) || null });
+});
+
+app.get('/api/remote/session/:sessionId/actions', (req, res) => {
+  const sessionId = String(req.params.sessionId || '');
+  const lastId = String(req.query.lastId || '');
+  const actions = fetchPendingActions(sessionId, lastId);
+  res.json({ actions, lastId: actions.length ? actions[actions.length - 1].id : lastId });
+});
+
+app.post('/api/remote/session/:sessionId/result', (req, res) => {
+  const sessionId = String(req.params.sessionId || '');
+  const { actionId, ok, output, error } = req.body || {};
+  if (!actionId) return res.status(400).json({ error: '缺少 actionId' });
+  const okSubmit = submitResult(sessionId, actionId, { ok: !!ok, output, error });
+  if (!okSubmit) return res.status(404).json({ error: 'action 不存在或已处理' });
+  res.json({ success: true });
+});
+
+app.post('/api/remote/session/close', (req, res) => {
+  const conversationId = String(req.body?.conversationId || '');
+  closeSession(conversationId);
+  res.json({ success: true });
 });
 
 // ============= 生产环境：托管前端构建产物（dist） =============

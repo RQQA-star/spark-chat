@@ -4,6 +4,7 @@ import { Monitor, ArrowLeft, Trash2, MessageCircle, Users, Bot, Megaphone, Video
 import { Conversation, Contact, ConvMessage, PermissionRequest } from '../types';
 import { ChatMessages } from '../components/ChatMessages';
 import { ChatInput } from '../components/ChatInput';
+import { RemoteAssistSession } from '../components/RemoteAssistSession';
 
 interface ChatPageProps {
   conversation: Conversation;
@@ -153,6 +154,8 @@ export function ChatPage({
   const [replyTo, setReplyTo] = useState<ConvMessage | null>(null);
   useEffect(() => { setReplyTo(null); }, [conversation.id]);
 
+  const [showRemoteSession, setShowRemoteSession] = useState(false);
+
   // 多选模式（批量转发 / 删除）
   const [multiSelect, setMultiSelect] = useState(false);
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -250,6 +253,11 @@ export function ChatPage({
                 </Button>
               </Tooltip>
             )}
+            <Tooltip content="发起跨机远程协助（对方 / 星火助手可远程操作本机）">
+              <Button icon={<Monitor />} onClick={() => setShowRemoteSession(true)} variant="outline">
+                发起远程协助
+              </Button>
+            </Tooltip>
           </>
         )}
       </header>
@@ -366,6 +374,7 @@ export function ChatPage({
         onSendCard={onSendCard}
         contacts={contacts}
       />
+      <RemoteAssistSession visible={showRemoteSession} conversationId={conversation.id} onClose={() => setShowRemoteSession(false)} />
     </div>
   );
 }
