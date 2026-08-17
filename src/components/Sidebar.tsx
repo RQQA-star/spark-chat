@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { Tooltip, Input, Dialog } from 'tdesign-react';
 import { MessageCircle, Users, Plus, Trash2, Settings, Moon, Sun, Search, UserPlus, Bell, BellOff, Pencil, Pin, Star, CheckCheck, Monitor } from 'lucide-react';
 import { Contact, Conversation } from '../types';
@@ -101,6 +101,8 @@ export function Sidebar({
     : conversations;
   // 置顶会话排在最前（稳定排序，保持其余相对顺序）
   const sortedConvs = [...filteredConvs].sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  // 置顶区与未置顶区的分界（用于渲染微信式分隔线；全置顶/全未置顶时不画）
+  const firstUnpinnedIdx = sortedConvs.findIndex(c => !c.pinned);
   const meId = contacts.find(c => c.id === 'me')?.id || 'me';
 
   const fmtTime = (iso?: string) => {
@@ -173,84 +175,92 @@ export function Sidebar({
               <div className="text-center text-sm mt-10" style={{ color: 'var(--td-text-color-placeholder)' }}>
                 {q ? '没有匹配的会话' : '还没有会话，去通讯录找个朋友聊聊吧'}
               </div>
-            ) : sortedConvs.map(conv => (
-              <div
-                key={conv.id}
-                onClick={() => onSelectConversation(conv.id)}
-                className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors"
-                style={{
-                  backgroundColor: conv.id === currentConversationId ? 'var(--td-brand-color-light)' : 'transparent',
-                }}
-                onMouseEnter={e => { if (conv.id !== currentConversationId) e.currentTarget.style.backgroundColor = 'var(--td-bg-color-component-hover)'; }}
-                onMouseLeave={e => { if (conv.id !== currentConversationId) e.currentTarget.style.backgroundColor = 'transparent'; }}
-              >
-                <div className="relative flex-shrink-0">
-                  <Avatar text={conv.avatarText} color={conv.avatarColor} />
-                  {conv.unreadCount && !conv.muted ? (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full text-white text-[11px] font-medium" style={{ backgroundColor: '#fa5151' }}>
-                      {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="truncate text-sm font-medium flex items-center gap-1" style={{ color: 'var(--td-text-color-primary)' }}>
-                      {conv.pinned && <Pin size={12} style={{ color: '#07c160', flexShrink: 0 }} />}
-                      {conv.title}
-                      {conv.muted && <BellOff size={12} style={{ color: 'var(--td-text-color-placeholder)', flexShrink: 0 }} />}
-                    </span>
-                    <span className="text-xs flex-shrink-0 ml-2" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtTime(conv.lastMessage?.createdAt)}</span>
+            ) : sortedConvs.map((conv, idx) => (
+              <Fragment key={conv.id}>
+                {/* 微信式：置顶区与未置顶区之间画一条细分隔线（仅两者都存在时） */}
+                {idx === firstUnpinnedIdx && firstUnpinnedIdx > 0 && (
+                  <div data-testid="pin-divider" className="mx-3 my-1" style={{ borderTop: '1px solid var(--td-component-stroke)' }} />
+                )}
+                <div
+                  data-testid={conv.id === currentConversationId ? 'conv-item-selected' : 'conv-item'}
+                  onClick={() => onSelectConversation(conv.id)}
+                  className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors"
+                  style={{
+                    backgroundColor: conv.id === currentConversationId ? 'var(--td-bg-color-container-active)' : 'transparent',
+                  }}
+                  onMouseEnter={e => { if (conv.id !== currentConversationId) e.currentTarget.style.backgroundColor = 'var(--td-bg-color-component-hover)'; }}
+                  onMouseLeave={e => { if (conv.id !== currentConversationId) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Avatar text={conv.avatarText} color={conv.avatarColor} />
+                    {conv.unreadCount && !conv.muted ? (
+                      <span data-testid="unread-badge" className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-1 flex items-center justify-center rounded-full text-white text-[10px] font-medium leading-none" style={{ backgroundColor: '#fa5151' }}>
+                        {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
+                      </span>
+                    ) : null}
                   </div>
-                  <div className="truncate text-xs mt-0.5" style={{ color: 'var(--td-text-color-placeholder)' }}>
-                    {drafts?.[conv.id] ? (
-                      <>
-                        <span className="mr-1" style={{ color: '#fa5151' }}>[草稿]</span>
-                        {drafts[conv.id]}
-                      </>
-                    ) : (
-                      <>
-                        {conv.lastMessage?.meta?.mentions?.includes('all') || conv.lastMessage?.meta?.mentions?.includes(meId) ? (
-                          <span className="text-[11px] px-1 rounded mr-1" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
-                        ) : null}
-                        {conv.lastMessage ? (conv.lastMessage.senderId === 'me' ? '我: ' : '') + conv.lastMessage.content : '暂无消息'}
-                      </>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="truncate text-sm font-medium" style={{ color: 'var(--td-text-color-primary)' }}>
+                        {conv.title}
+                      </span>
+                      <span className="text-xs flex-shrink-0 ml-2" style={{ color: 'var(--td-text-color-placeholder)' }}>{fmtTime(conv.lastMessage?.createdAt)}</span>
+                    </div>
+                    <div className="truncate text-xs mt-0.5" style={{ color: 'var(--td-text-color-placeholder)' }}>
+                      {drafts?.[conv.id] ? (
+                        <>
+                          <span className="mr-1" style={{ color: '#fa5151' }}>[草稿]</span>
+                          {drafts[conv.id]}
+                        </>
+                      ) : (
+                        <>
+                          {conv.lastMessage?.meta?.mentions?.includes('all') || conv.lastMessage?.meta?.mentions?.includes(meId) ? (
+                            <span className="text-[11px] px-1 rounded mr-1" style={{ color: '#fff', backgroundColor: '#e34d59' }}>@我</span>
+                          ) : null}
+                          {conv.lastMessage ? (conv.lastMessage.senderId === 'me' ? '我: ' : '') + conv.lastMessage.content : '暂无消息'}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {/* 微信式：免打扰在行右侧常驻静音铃图标，不挤占标题 */}
+                  {conv.muted && (
+                    <BellOff size={14} data-testid="mute-indicator" className="flex-shrink-0" style={{ color: 'var(--td-text-color-placeholder)' }} />
+                  )}
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                    {onTogglePin && (
+                      <Tooltip content={conv.pinned ? '取消置顶' : '置顶会话'}>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={e => { e.stopPropagation(); onTogglePin(conv.id, !conv.pinned); }}
+                          style={{ color: conv.pinned ? '#07c160' : 'var(--td-text-color-secondary)' }}
+                        >
+                          <Pin size={15} />
+                        </button>
+                      </Tooltip>
                     )}
+                    {onToggleMute && (
+                      <Tooltip content={conv.muted ? '允许通知' : '消息免打扰'}>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={e => { e.stopPropagation(); onToggleMute(conv.id, !conv.muted); }}
+                          style={{ color: conv.muted ? '#e34d59' : 'var(--td-text-color-secondary)' }}
+                        >
+                          {conv.muted ? <BellOff size={15} /> : <Bell size={15} />}
+                        </button>
+                      </Tooltip>
+                    )}
+                    <Tooltip content="删除会话">
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={e => { e.stopPropagation(); onDeleteConversation(conv.id); }}
+                        style={{ color: 'var(--td-text-color-secondary)' }}
+                      >
+                        <Trash2 />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
-                <div className="flex items-center gap-0.5 flex-shrink-0">
-                  {onTogglePin && (
-                    <Tooltip content={conv.pinned ? '取消置顶' : '置顶会话'}>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={e => { e.stopPropagation(); onTogglePin(conv.id, !conv.pinned); }}
-                        style={{ color: conv.pinned ? '#07c160' : 'var(--td-text-color-secondary)' }}
-                      >
-                        <Pin size={15} />
-                      </button>
-                    </Tooltip>
-                  )}
-                  {onToggleMute && (
-                    <Tooltip content={conv.muted ? '允许通知' : '消息免打扰'}>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={e => { e.stopPropagation(); onToggleMute(conv.id, !conv.muted); }}
-                        style={{ color: conv.muted ? '#e34d59' : 'var(--td-text-color-secondary)' }}
-                      >
-                        {conv.muted ? <BellOff size={15} /> : <Bell size={15} />}
-                      </button>
-                    </Tooltip>
-                  )}
-                  <Tooltip content="删除会话">
-                    <button
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={e => { e.stopPropagation(); onDeleteConversation(conv.id); }}
-                      style={{ color: 'var(--td-text-color-secondary)' }}
-                    >
-                      <Trash2 />
-                    </button>
-                  </Tooltip>
-                </div>
-              </div>
+              </Fragment>
             ))
           )}
 

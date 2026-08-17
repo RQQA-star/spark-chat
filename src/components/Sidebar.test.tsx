@@ -91,3 +91,71 @@ describe('Sidebar —— 草稿前缀', () => {
     expect(screen.getByText('12')).toBeInTheDocument();
   });
 });
+
+describe('Sidebar —— 会话列表项微信式对齐', () => {
+  it('选中会话渲染为 conv-item-selected（背景改用中性灰 var，jsdom 不解析 var，故仅锁结构钩子）', () => {
+    const { rerender } = render(<Sidebar {...baseProps} conversations={[conv({ id: 'c1' })]} currentConversationId="c1" />);
+    expect(screen.getByTestId('conv-item-selected')).toBeInTheDocument();
+    // 反向：未选中项不得带 selected 钩子，且普通项带 conv-item
+    rerender(<Sidebar {...baseProps} conversations={[conv({ id: 'c2' })]} currentConversationId="c1" />);
+    expect(screen.queryByTestId('conv-item-selected')).toBeNull();
+    expect(screen.getByTestId('conv-item')).toBeInTheDocument();
+  });
+
+  it('置顶与未置顶混排时，两者间出现细分隔线', () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        conversations={[
+          conv({ id: 'b', title: '会话乙', pinned: true }),
+          conv({ id: 'a', title: '会话甲', pinned: false }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('pin-divider')).toBeInTheDocument();
+  });
+
+  it('全部未置顶或全部置顶时不画分隔线', () => {
+    const { rerender } = render(
+      <Sidebar
+        {...baseProps}
+        conversations={[
+          conv({ id: 'a', title: '会话甲', pinned: false }),
+          conv({ id: 'b', title: '会话乙', pinned: false }),
+        ]}
+      />,
+    );
+    expect(screen.queryByTestId('pin-divider')).toBeNull();
+    rerender(
+      <Sidebar
+        {...baseProps}
+        conversations={[
+          conv({ id: 'a', title: '会话甲', pinned: true }),
+          conv({ id: 'b', title: '会话乙', pinned: true }),
+        ]}
+      />,
+    );
+    expect(screen.queryByTestId('pin-divider')).toBeNull();
+  });
+
+  it('免打扰会话在行右侧常驻静音图标（不再内联到标题）', () => {
+    render(<Sidebar {...baseProps} conversations={[conv({ id: 'm', title: '免打扰会话', muted: true })]} />);
+    expect(screen.getByTestId('mute-indicator')).toBeInTheDocument();
+  });
+
+  it('普通会话不显示静音图标', () => {
+    render(<Sidebar {...baseProps} conversations={[conv({ id: 'n', title: '普通会话', muted: false })]} />);
+    expect(screen.queryByTestId('mute-indicator')).toBeNull();
+  });
+
+  it('未读红点使用微信红 #fa5151 且为右上角小圆点', () => {
+    render(<Sidebar {...baseProps} conversations={[conv({ id: 'n', title: '普通会话', unreadCount: 5 })]} />);
+    const badge = screen.getByTestId('unread-badge');
+    expect(badge.textContent).toBe('5');
+    // jsdom 将 #fa5151 归一为 rgb(250, 81, 81)
+    expect(badge.style.backgroundColor).toBe('rgb(250, 81, 81)');
+    expect(badge.className).toContain('rounded-full');
+    expect(badge.className).toContain('-top-1.5');
+    expect(badge.className).toContain('-right-1.5');
+  });
+});
