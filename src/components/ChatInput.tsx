@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from 'tdesign-react';
 import { Mic, MicOff, Send, Square, X, Check, Smile, Image as ImageIcon, File as FileIcon, Plus, MapPin, Film, Link2, UserPlus, SmilePlus } from 'lucide-react';
 import { Contact } from '../types';
@@ -72,6 +72,31 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     onSendSticker?.(e);
     setShowSticker(false);
   };
+
+  // 点击输入区外部 或 按 ESC 时关闭所有浮层（表情 / 大表情 / + 菜单 / 名片选择器）
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setShowEmoji(false);
+        setShowSticker(false);
+        setShowPlus(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowEmoji(false);
+        setShowSticker(false);
+        setShowPlus(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
 
   // 「+」扩展菜单（名片 / 位置 / 视频 / 链接）
   const [showPlus, setShowPlus] = useState(false);
@@ -154,6 +179,10 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     const val = e.target.value;
     const caret = e.target.selectionStart ?? val.length;
     setText(val);
+    // 输入框随内容自动增高（上限 128px，约 max-h-32），超过则内部滚动
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px';
     const before = val.slice(0, caret);
     const match = before.match(/(^|\s)@([^\s@]*)$/);
     if (match) {
@@ -177,7 +206,10 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     const newText = before + insert + after;
     setText(newText);
     setShowMention(false);
-    requestAnimationFrame(() => { el?.focus(); });
+    requestAnimationFrame(() => {
+      el?.focus();
+      if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 128) + 'px'; }
+    });
   };
 
   const collectMentions = (t: string): string[] => {
@@ -191,7 +223,11 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
     const quote = replyTo ? { messageId: replyTo.id, senderName: replyTo.senderName, preview: replyTo.preview } : undefined;
     onSendText(t, collectMentions(t), quote);
     setText('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setShowMention(false);
+    setShowEmoji(false);
+    setShowSticker(false);
+    setShowPlus(false);
     if (replyTo) onCancelReply?.();
   };
 
@@ -239,7 +275,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
   };
 
   return (
-    <div className="px-4 pb-4 pt-3" style={{ backgroundColor: 'var(--td-bg-color-page)', borderTop: '1px solid var(--td-component-stroke)' }}>
+    <div ref={rootRef} className="px-4 pb-4 pt-3" style={{ backgroundColor: 'var(--td-bg-color-page)', borderTop: '1px solid var(--td-component-stroke)' }}>
       <div className="max-w-3xl mx-auto">
         {replyTo && (
           <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg" style={{ backgroundColor: 'var(--td-bg-color-container)', borderLeft: '3px solid #07c160' }}>

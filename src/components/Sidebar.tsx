@@ -87,6 +87,7 @@ export function Sidebar({
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [delTarget, setDelTarget] = useState<Contact | null>(null);
   const humans = contacts.filter(c => !c.isAgent && c.id !== 'me');
+  const totalUnread = conversations.reduce((s, c) => s + (c.unreadCount || 0), 0);
   const agents = contacts.filter(c => c.isAgent);
   const starredContacts = contacts.filter(c => c.starred && !c.isAgent && c.id !== 'me');
   const meContact = contacts.find(c => c.id === 'me');
@@ -151,11 +152,13 @@ export function Sidebar({
               <Plus />
             </button>
           </Tooltip>
-          <Tooltip content="全部标记为已读">
-            <button onClick={() => onMarkAllRead?.()} className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-secondary)' }}>
-              <CheckCheck />
-            </button>
-          </Tooltip>
+          {totalUnread > 0 && (
+            <Tooltip content="全部标记为已读">
+              <button onClick={() => onMarkAllRead?.()} className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--td-bg-color-component-hover)]" style={{ color: 'var(--td-text-color-secondary)' }}>
+                <CheckCheck />
+              </button>
+            </Tooltip>
+          )}
         </div>
 
         {/* 列表体 */}
