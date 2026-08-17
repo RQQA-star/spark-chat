@@ -82,4 +82,40 @@ describe('ChatMessages —— 渲染与交互', () => {
     renderMessages([msg({ id: 'p2', msgType: 'pat', senderId: meId, meta: { pattedId: 'other' } })]);
     expect(screen.getByText('你 拍了拍 对方')).toBeInTheDocument();
   });
+
+  it('撤回 2 分钟内本人文本消息显示「重新编辑」按钮，点击回调原文', () => {
+    const onReedit = vi.fn();
+    renderMessages([msg({
+      id: 're1', senderId: meId, msgType: 'text', content: '我要重新编辑', recalled: true, recalledAt: new Date().toISOString(),
+    })], { onReedit });
+    expect(screen.getByText('你 撤回了一条消息')).toBeInTheDocument();
+    const btn = screen.getByText('重新编辑');
+    fireEvent.click(btn);
+    expect(onReedit).toHaveBeenCalledWith('我要重新编辑');
+  });
+
+  it('撤回超过 2 分钟不显示「重新编辑」按钮', () => {
+    renderMessages([msg({
+      id: 're2', senderId: meId, msgType: 'text', content: '过期', recalled: true,
+      recalledAt: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+    })], { onReedit: vi.fn() });
+    expect(screen.getByText('你 撤回了一条消息')).toBeInTheDocument();
+    expect(screen.queryByText('重新编辑')).toBeNull();
+  });
+
+  it('对方撤回的消息不显示「重新编辑」按钮', () => {
+    renderMessages([msg({
+      id: 're3', senderId: 'other', msgType: 'text', content: 'x', recalled: true, recalledAt: new Date().toISOString(),
+    })], { onReedit: vi.fn() });
+    expect(screen.getByText('对方 撤回了一条消息')).toBeInTheDocument();
+    expect(screen.queryByText('重新编辑')).toBeNull();
+  });
+
+  it('撤回的非文本消息不显示「重新编辑」按钮', () => {
+    renderMessages([msg({
+      id: 're4', senderId: meId, msgType: 'image', content: '', recalled: true, recalledAt: new Date().toISOString(),
+    })], { onReedit: vi.fn() });
+    expect(screen.getByText('你 撤回了一条消息')).toBeInTheDocument();
+    expect(screen.queryByText('重新编辑')).toBeNull();
+  });
 });

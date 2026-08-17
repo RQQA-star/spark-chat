@@ -43,6 +43,8 @@ export default function App() {
   const [settings, setSettings] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [focusMsg, setFocusMsg] = useState<{ id: string; nonce: number } | null>(null);
+  // 撤回后「重新编辑」回填（text + nonce 触发 ChatInput 的 prefill effect）
+  const [reeditMsg, setReeditMsg] = useState<{ text: string; nonce: number } | null>(null);
   // 待转发的内容：可能是单条消息，也可能是多选合并后的「聊天记录」
   const [pendingForward, setPendingForward] = useState<{ message?: ConvMessage; merged?: { title: string; content: string } } | null>(null);
   const [agentConfigOpen, setAgentConfigOpen] = useState(false);
@@ -74,6 +76,9 @@ export default function App() {
   useEffect(() => {
     setActiveConversation(currentConversationId);
   }, [currentConversationId]);
+
+  // 切换会话时清掉「重新编辑」回填，避免跨会话误填
+  useEffect(() => { setReeditMsg(null); }, [currentConversationId]);
 
   const enableNotifications = useCallback(async () => {
     const p = await requestNotificationPermission();
@@ -124,6 +129,9 @@ export default function App() {
   const handlePat = useCallback((targetId: string) => {
     sendPat(targetId);
   }, [sendPat]);
+  const handleReedit = useCallback((content: string) => {
+    setReeditMsg({ text: content, nonce: Date.now() });
+  }, []);
 
   const handleSendAgentAssist = useCallback((text: string) => {
     setRemoteAssist(false);
@@ -331,6 +339,7 @@ export default function App() {
             onPreviewImage={handlePreviewImage}
             onPreviewContact={handlePreviewContact}
             onPat={handlePat}
+            onReedit={handleReedit}
             onFavorite={handleFavorite}
             onRetry={retryMessage}
             typingMembers={typingMembers}
@@ -344,6 +353,7 @@ export default function App() {
             onStartVideoCall={handleStartVideoCall}
             focusMessageId={focusMsg?.id ?? null}
             onClearFocusMessage={clearFocus}
+            reedit={reeditMsg}
           />
         ) : (
           <Welcome

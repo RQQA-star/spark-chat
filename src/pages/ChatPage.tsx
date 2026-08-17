@@ -44,6 +44,10 @@ interface ChatPageProps {
   onPreviewContact?: (contactId: string) => void;
   onPat?: (targetId: string) => void;
   onFavorite?: (id: string) => void;
+  /** 撤回后「重新编辑」回填（仅本人文本消息、撤回 2 分钟内） */
+  onReedit?: (content: string) => void;
+  /** 撤回后「重新编辑」的回填内容（由上层持有，透传给输入框） */
+  reedit?: { text: string; nonce: number } | null;
   typingMembers: string[];
   loadOlderMessages: () => Promise<void>;
   hasMoreMessages: boolean;
@@ -74,7 +78,7 @@ export function ChatPage({
   isAgentConversation, agentName, onSendText, onSendVoice, onSendImage, onSendFile, onSendAgentAssist, onStop,
   onPermissionAllow, onPermissionDeny, onOpenRemoteAssist, onOpenAgentConfig, onBack,   onClearMessages, onDeleteMessage,
   onForward, onRetry, onEditMessage, onRecallMessage, onToggleReaction, onDeleteMessages, onBatchForward,
-  onPreviewImage, onPreviewContact, onFavorite, onPat,
+  onPreviewImage, onPreviewContact, onFavorite, onPat, onReedit, reedit,
   onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard,
   typingMembers, loadOlderMessages, hasMoreMessages, isLoadingOlder, loading, onManageGroup, remoteAssistActive, onStartVideoCall, focusMessageId, onClearFocusMessage,
 }: ChatPageProps) {
@@ -325,6 +329,7 @@ export function ChatPage({
             onPreviewContact={onPreviewContact}
             onPat={onPat}
             onFavorite={onFavorite}
+            onReedit={onReedit}
             loading={loading}
             focusMessageId={focusMessageId}
             onFocusHandled={onClearFocusMessage}
@@ -376,6 +381,7 @@ export function ChatPage({
         meId={meId}
         replyTo={replyInfo}
         onCancelReply={() => setReplyTo(null)}
+        reedit={reedit}
         onSendFile={onSendFile}
         onSendSticker={onSendSticker}
         onSendLink={onSendLink}

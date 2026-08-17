@@ -29,6 +29,8 @@ interface ChatMessagesProps {
   onPreviewContact?: (contactId: string) => void;
   /** 双击头像拍一拍 */
   onPat?: (targetId: string) => void;
+  /** 撤回后重新编辑（仅本人文本消息、撤回 2 分钟内） */
+  onReedit?: (content: string) => void;
   // 收藏
   onFavorite?: (id: string) => void;
   // 多选模式
@@ -364,7 +366,7 @@ export function ChatMessages({
   messages, contacts, meId, isGroup, messagesEndRef,
   permissionRequest, onPermissionAllow, onPermissionDeny, onDeleteMessage, onForward, onReply, onRetry, onEdit, onRecall, onToggleReaction, onPat, scrollRef,
   focusMessageId, onFocusHandled, onLoadOlderMessages, hasMoreMessages,
-  onPreviewImage, onPreviewContact, onFavorite,
+  onPreviewImage, onPreviewContact, onFavorite, onReedit,
   multiSelect = false, selection = new Set<string>(), onToggleSelect = () => {}, onEnterMultiSelect = () => {},
   loading = false,
 }: ChatMessagesProps) {
@@ -468,16 +470,23 @@ export function ChatMessages({
           </div>
         ) : null;
 
-        // 撤回：渲染为系统提示
+        // 撤回：渲染为系统提示；本人文本消息 2 分钟内可「重新编辑」
         if (msg.recalled) {
           const who = msg.senderId === meId ? '你' : (getContact(msg.senderId)?.name || '对方');
+          const canReedit = msg.senderId === meId && msg.msgType === 'text' && !!msg.content
+            && !!msg.recalledAt && Date.now() - new Date(msg.recalledAt).getTime() < 2 * 60 * 1000;
           return (
             <Fragment key={msg.id}>
               {divider}
-              <div className="flex justify-center">
+              <div className="flex justify-center items-center gap-2">
                 <span className="text-xs px-3 py-1 rounded-full" style={{ backgroundColor: 'var(--td-bg-color-component)', color: 'var(--td-text-color-placeholder)' }}>
                   {who} 撤回了一条消息
                 </span>
+                {canReedit && (
+                  <button type="button" onClick={() => onReedit?.(msg.content || '')} className="text-xs font-medium" style={{ color: '#07c160' }}>
+                    重新编辑
+                  </button>
+                )}
               </div>
             </Fragment>
           );

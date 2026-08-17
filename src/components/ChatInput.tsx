@@ -32,6 +32,8 @@ interface ChatInputProps {
   onSendLocation?: (lat: number, lng: number, name?: string, address?: string) => void;
   onSendCard?: (contactId: string) => void;
   contacts?: Contact[];
+  /** 撤回后「重新编辑」回填（text + nonce 触发） */
+  reedit?: { text: string; nonce: number } | null;
 }
 
 const EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','🤔','😎','😭','😅','🙄','👍','👎','👏','🙏','💪','🎉','🔥','❤️','💔','✨','🌹','🌟','🍻','☕','🚀','💡','✅','❌'];
@@ -41,7 +43,7 @@ function fmtDur(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile, onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard, contacts = [] }: ChatInputProps) {
+export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinking, onStop, placeholder, isGroup, members = [], meId = 'me', replyTo, onCancelReply, onSendFile, onSendSticker, onSendLink, onSendVideo, onSendLocation, onSendCard, contacts = [], reedit }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -68,6 +70,14 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
 
   // 大表情（贴纸）面板
   const [showSticker, setShowSticker] = useState(false);
+
+  // 撤回后「重新编辑」：把原文本回填到输入框（reedit.nonce 变化即触发一次）
+  useEffect(() => {
+    if (reedit?.text != null) {
+      setText(reedit.text);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, [reedit]);
   const insertSticker = (e: string) => {
     onSendSticker?.(e);
     setShowSticker(false);
