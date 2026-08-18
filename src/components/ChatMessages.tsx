@@ -427,6 +427,11 @@ export function ChatMessages({
     onFocusHandled?.();
   }, [focusMessageId, messages, hasMoreMessages, onLoadOlderMessages, onFocusHandled]);
 
+  // 卸载时清理可能残留的长按计时器，避免对已卸载组件回调
+  useEffect(() => () => {
+    if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
+  }, []);
+
   const canRecall = (msg: ConvMessage) => {
     if (msg.senderId !== meId || msg.recalled) return false;
     if (msg.msgType === 'system' || msg.msgType === 'agent') return false;
@@ -563,10 +568,16 @@ export function ChatMessages({
             {divider}
             <div
               id={`msg-${msg.id}`}
-              className={`group flex gap-3 ${isMe ? 'flex-row-reverse' : ''} ${selected ? 'rounded-xl px-1' : ''} ${highlightId === msg.id ? 'msg-flash' : ''}`}
+              className={`group relative flex gap-3 ${isMe ? 'flex-row-reverse' : ''} ${selected ? 'rounded-xl px-1' : ''} ${highlightId === msg.id ? 'msg-flash' : ''}`}
               style={selected ? { backgroundColor: 'rgba(7,193,96,0.12)' } : undefined}
               onContextMenu={(e) => openMenu(e, msg.id)}
-              onTouchStart={() => { longPressRef.current = window.setTimeout(() => openMenu({ clientX: 0, clientY: 0 } as any, msg.id), 500); }}
+              onTouchStart={(e) => {
+                const t = e.touches[0];
+                const x = t?.clientX ?? 0;
+                const y = t?.clientY ?? 0;
+                longPressRef.current = window.setTimeout(() => openMenu({ clientX: x, clientY: y } as any, msg.id), 500);
+              }}
+              onTouchMove={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
               onTouchEnd={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; } }}
             >
               {/* 头像 / 多选勾选 */}
@@ -776,7 +787,7 @@ export function ChatMessages({
 
               {/* 添加 reaction 面板 */}
               {reactionFor === msg.id && onToggleReaction && (
-                <div className="absolute z-30 flex gap-1 p-1 rounded-full shadow-lg" style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }} onClick={(e) => e.stopPropagation()}>
+                <div className="absolute z-30 flex gap-1 p-1 rounded-full shadow-xl" style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }} onClick={(e) => e.stopPropagation()}>
                   {REACTION_EMOJIS.map(em => (
                     <button key={em} onClick={() => { onToggleReaction(msg.id, em); setReactionFor(null); }} className="text-lg hover:scale-125 transition-transform">{em}</button>
                   ))}

@@ -21,12 +21,18 @@ export function SettingsPanel({ visible, onClose, theme, onToggleTheme, notifica
   const [status, setStatus] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const bgImgRef = useRef<HTMLInputElement>(null);
+  const savedTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (visible) {
       fetch('/api/check-login').then(r => r.json()).then(setStatus).catch(() => {});
     }
   }, [visible]);
+
+  // 卸载时清理「已保存」提示计时器，避免对已卸载组件 setState
+  useEffect(() => () => {
+    if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current);
+  }, []);
 
   const save = async () => {
     if (!apiKey && !authToken) return;
@@ -37,7 +43,8 @@ export function SettingsPanel({ visible, onClose, theme, onToggleTheme, notifica
     const data = await res.json();
     setSaved(true);
     setStatus({ isLoggedIn: true, method: 'env' });
-    setTimeout(() => setSaved(false), 2000);
+    if (savedTimerRef.current) window.clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = window.setTimeout(() => setSaved(false), 2000);
   };
 
   const handleBgImage = (e: React.ChangeEvent<HTMLInputElement>) => {

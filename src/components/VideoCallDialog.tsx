@@ -30,6 +30,7 @@ export function VideoCallDialog({ visible, peerName, peerAvatarText, peerAvatarC
   const [seconds, setSeconds] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [camStream, setCamStream] = useState<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
 
   // 模拟"接通"：2 秒后进入 connected，并开始计时
@@ -58,10 +59,11 @@ export function VideoCallDialog({ visible, peerName, peerAvatarText, peerAvatarC
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        setCamStream(stream);
       } catch {
         // 无摄像头 / 拒绝授权：静默降级为头像占位
         streamRef.current = null;
+        setCamStream(null);
       }
     })();
     return () => {
@@ -70,8 +72,14 @@ export function VideoCallDialog({ visible, peerName, peerAvatarText, peerAvatarC
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
+      setCamStream(null);
     };
   }, [visible]);
+
+  // 摄像头就绪后绑定到 video 元素（camStream 变化触发重渲染，确保元素已挂载）
+  useEffect(() => {
+    if (localVideoRef.current && camStream) localVideoRef.current.srcObject = camStream;
+  }, [camStream]);
 
   // 静音 / 关摄像头：实时切换轨道
   useEffect(() => {
@@ -121,7 +129,7 @@ export function VideoCallDialog({ visible, peerName, peerAvatarText, peerAvatarC
 
         {/* 本地自视图（摄像头或占位） */}
         <div className="absolute right-4 bottom-4 w-40 h-28 rounded-xl overflow-hidden border-2" style={{ borderColor: 'rgba(255,255,255,0.25)', backgroundColor: '#000' }}>
-          {camOff || !streamRef.current ? (
+          {camOff || !camStream ? (
             <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#2a2f37' }}>
               <VideoOff size={22} style={{ color: 'rgba(255,255,255,0.5)' }} />
             </div>
