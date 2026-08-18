@@ -349,7 +349,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             {showEmoji && (
               <div
                 data-testid="emoji-popover"
-                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-6 gap-1 z-30"
+                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-xl grid grid-cols-6 gap-1 z-30"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
                 {EMOJIS.map((em, i) => (
@@ -391,7 +391,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
             </button>
             {showSticker && (
               <div
-                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-lg grid grid-cols-7 gap-1 z-30 max-h-56 overflow-y-auto"
+                className="absolute bottom-full left-0 mb-2 w-64 p-2 rounded-xl shadow-xl grid grid-cols-7 gap-1 z-30 max-h-56 overflow-y-auto"
                 style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
               >
                 {STICKERS.map((em, i) => (
@@ -479,7 +479,7 @@ export function ChatInput({ onSendText, onSendVoice, onSendImage, isAgentThinkin
               {showMention && isGroup && filteredMembers.length > 0 && (
                 <div
                   data-testid="mention-popover"
-                  className="absolute bottom-full left-0 mb-2 w-56 max-h-52 overflow-y-auto rounded-xl shadow-lg p-1 z-30"
+                  className="absolute bottom-full left-0 mb-2 w-56 max-h-52 overflow-y-auto rounded-xl shadow-xl p-1 z-30"
                   style={{ backgroundColor: 'var(--td-bg-color-container)', border: '1px solid var(--td-component-stroke)' }}
                 >
                   <div className="px-2 py-1 text-[11px]" style={{ color: 'var(--td-text-color-placeholder)' }}>选择要 @ 的成员</div>
